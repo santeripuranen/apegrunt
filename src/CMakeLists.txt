@@ -28,7 +28,6 @@ set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib )
 set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin )
 
 # Add apegrunt library
-superdca_target_message( "libapegrunt" )
 if( APEGRUNT_LIBRARY_SOURCES )
 	#add_library( apegrunt SHARED ${APEGRUNT_LIBRARY_SOURCES} )
 	add_library( apegrunt STATIC ${APEGRUNT_LIBRARY_SOURCES} )
