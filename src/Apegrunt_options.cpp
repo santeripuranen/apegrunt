@@ -160,7 +160,7 @@ void Apegrunt_options::set_threads( int nthreads ) { } // do nothing
 #endif // APEGRUNT_NO_TBB
 
 // alignment filtering
-bool Apegrunt_options::fuse_duplicates() { return s_fuse_duplicates; }
+//bool Apegrunt_options::fuse_duplicates() { return s_fuse_duplicates; }
 double Apegrunt_options::get_minor_allele_frequency_threshold() { return s_minor_allele_frequency_threshold; }
 double Apegrunt_options::get_gap_frequency_threshold() { return s_gap_frequency_threshold; }
 Threshold_rule<int> Apegrunt_options::get_allele_state_rule() { return s_allele_state_rule; }
