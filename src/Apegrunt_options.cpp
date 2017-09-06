@@ -68,7 +68,7 @@ const std::string Apegrunt_options::s_title_string(
 
 const std::string Apegrunt_options::s_version_string(
 	std::string("Apegrunt version ") + std::to_string(Apegrunt_version::s_MajorVersion) + "." + std::to_string(Apegrunt_version::s_MinorVersion) + "." + std::to_string(Apegrunt_version::s_SubminorVersion)
-	+ " revision " + TOSTRING(GIT_BRANCH) + "-" + TOSTRING(GIT_COMMIT_HASH) + " / " +
+	+ " | revision " + TOSTRING(APEGRUNT_GIT_BRANCH) + "-" + TOSTRING(APEGRUNT_GIT_COMMIT_HASH) + " | " +
 #ifdef __AVX2__
 	"AVX2"
 #elif __AVX__
