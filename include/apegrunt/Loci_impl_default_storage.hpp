@@ -33,7 +33,6 @@
 
 #include "Loci.h"
 #include "Loci_impl_base.hpp"
-//#include "Loci_iterator_interface.hpp"
 
 namespace apegrunt {
 
