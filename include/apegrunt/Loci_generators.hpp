@@ -28,7 +28,6 @@
 
 namespace apegrunt {
 
-template< typename LociListT >
 bool generate_Loci_list( Loci_ptr loci, std::ostream *outstream )
 {
 // this is temporary file output code, used until we have a proper generator implementation.
