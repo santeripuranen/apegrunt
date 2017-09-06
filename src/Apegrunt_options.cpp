@@ -36,8 +36,8 @@ std::size_t Apegrunt_options::s_input_indexing_base = 1;
 int Apegrunt_options::s_begin_locus=Apegrunt_options::s_input_indexing_base;
 int Apegrunt_options::s_end_locus=-1;
 
-std::string Apegrunt_options::s_outfile_name = "apegrunt.log";
-std::string Apegrunt_options::s_errfile_name = "apegrunt.err";
+//std::string Apegrunt_options::s_outfile_name = "apegrunt.log";
+//std::string Apegrunt_options::s_errfile_name = "apegrunt.err";
 
 #ifndef APEGRUNT_NO_TBB // Threading with Threading Building Blocks
 int Apegrunt_options::s_threads = -1;
@@ -105,7 +105,6 @@ double Apegrunt_options::s_gap_frequency_threshold = 0.15; // default=0.15, i.e.
 Threshold_rule<int> Apegrunt_options::s_allele_state_rule(">1");
 
 bool Apegrunt_options::s_no_filter_alignment = false;
-bool Apegrunt_options::s_output_filtered_alignment = false;
 bool Apegrunt_options::s_output_allele_frequencies = false;
 
 bool Apegrunt_options::s_no_optimize_column_order = true; // permanently disabled
@@ -166,7 +165,6 @@ double Apegrunt_options::get_minor_allele_frequency_threshold() { return s_minor
 double Apegrunt_options::get_gap_frequency_threshold() { return s_gap_frequency_threshold; }
 Threshold_rule<int> Apegrunt_options::get_allele_state_rule() { return s_allele_state_rule; }
 bool Apegrunt_options::filter_alignment() { return !s_no_filter_alignment; }
-bool Apegrunt_options::output_filtered_alignment() { return s_output_filtered_alignment; }
 bool Apegrunt_options::output_allele_frequencies() { return s_output_allele_frequencies; }
 bool Apegrunt_options::optimize_column_order() { return !s_no_optimize_column_order; }
 bool Apegrunt_options::sample_alignment() { return s_sample_alignment; }
@@ -193,7 +191,6 @@ m_general_options.add_options()
 
 	m_alignment_options.add_options()
 		("no-filter-alignment", po::bool_switch( &Apegrunt_options::s_no_filter_alignment )->default_value(Apegrunt_options::s_no_filter_alignment)->notifier(Apegrunt_options::s_init_no_filter_alignment), "Do not reduce the number of apegrunt input loci by applying MAF and GAP thresholds.")
-		("output-filtered-alignment", po::bool_switch( &Apegrunt_options::s_output_filtered_alignment )->default_value(Apegrunt_options::s_output_filtered_alignment)->notifier(Apegrunt_options::s_init_output_filtered_alignment), "Write filtered alignment to file.")
 		("output-allele-frequencies", po::bool_switch( &Apegrunt_options::s_output_allele_frequencies )->default_value(Apegrunt_options::s_output_allele_frequencies)->notifier(Apegrunt_options::s_init_output_allele_frequencies), "Write allele frequencies to file.")
 		("input-indexing-base", po::value< std::size_t >( &Apegrunt_options::s_input_indexing_base )->default_value(Apegrunt_options::s_input_indexing_base)->notifier(Apegrunt_options::s_init_input_indexing_base), "Base index for input." )
 		("output-indexing-base", po::value< std::size_t >( &Apegrunt_options::s_output_indexing_base )->default_value(Apegrunt_options::s_output_indexing_base)->notifier(Apegrunt_options::s_init_output_indexing_base), "Base index for output." )
@@ -264,13 +261,6 @@ void Apegrunt_options::s_init_no_filter_alignment( bool flag )
 	if( flag && s_verbose && s_out )
 	{
 		*s_out << "apegrunt: do not reduce the number of apegrunt analyzable input loci by applying MAF and GAP thresholds.\n";
-	}
-}
-void Apegrunt_options::s_init_output_filtered_alignment( bool flag )
-{
-	if( flag && s_verbose && s_out )
-	{
-		*s_out << "apegrunt: output filtered alignment to file.\n";
 	}
 }
 void Apegrunt_options::s_init_output_allele_frequencies( bool flag )

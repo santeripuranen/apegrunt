@@ -63,7 +63,6 @@ public:
 	// alignment processing
 	static bool fuse_duplicates();
 	static bool filter_alignment();
-	static bool output_filtered_alignment();
 	static bool output_allele_frequencies();
 	static bool optimize_column_order();
 	static bool sample_alignment();
@@ -89,12 +88,11 @@ private:
 	static uint s_state; // 1 for normal operation, 0 signals a wish to (gracefully) terminate process
 	static bool s_verbose;
 
-	static bool s_fuse_duplicates;
+//	static bool s_fuse_duplicates;
 	static double s_minor_allele_frequency_threshold;
 	static double s_gap_frequency_threshold;
 	static Threshold_rule<int> s_allele_state_rule;
 	static bool s_no_filter_alignment;
-	static bool s_output_filtered_alignment;
 	static bool s_output_allele_frequencies;
 	static bool s_no_optimize_column_order;
 	static bool s_sample_alignment;
@@ -102,8 +100,8 @@ private:
 
 	static std::ostream *s_out;
 	static std::ostream *s_err;
-	static std::string s_errfile_name;
-	static std::string s_outfile_name;
+//	static std::string s_errfile_name;
+//	static std::string s_outfile_name;
 	static std::size_t s_output_indexing_base;
 	static std::size_t s_input_indexing_base;
 	static int s_begin_locus;
@@ -133,7 +131,6 @@ private:
 	static void s_init_gap_frequency_threshold( double threshold );
 	static void s_init_allele_state_rule( const std::string& rule_string );
 	static void s_init_no_filter_alignment( bool flag );
-	static void s_init_output_filtered_alignment( bool flag );
 	static void s_init_output_allele_frequencies( bool flag );
 	static void s_init_sample_alignment( bool flag );
 	static void s_init_output_indexing_base( std::size_t base_index );
