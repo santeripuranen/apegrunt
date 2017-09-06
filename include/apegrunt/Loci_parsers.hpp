@@ -104,10 +104,7 @@ Loci_ptr make_Loci_list( std::ostringstream& loci_stream, std::size_t base_index
 template< typename LociT=Loci_impl_default_storage<std::size_t> >
 Loci_ptr make_Loci_list( std::vector<std::size_t> loci_list, std::size_t base_index=0 )
 {
-	Loci_ptr loci = make_Loci_ptr<LociT>(loci_list);
-	//loci->set_id_string( std::string("default") );
-
-	return loci;
+	return make_Loci_ptr<LociT>(loci_list);
 }
 
 } // namespace apegrunt
