@@ -24,7 +24,7 @@
 
 #include <ostream>
 
-#include "Loci_interface.h"
+#include "Loci_interface.hpp"
 
 namespace apegrunt {
 
