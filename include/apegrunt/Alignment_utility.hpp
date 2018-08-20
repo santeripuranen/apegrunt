@@ -47,7 +47,7 @@
 #include "accumulators/distribution_bincount.hpp"
 #include "accumulators/distribution_ordered.hpp"
 #include "accumulators/distribution_cumulative.hpp"
-#include "accumulators/distribution_generator_svg.hpp"
+//#include "accumulators/distribution_generator_svg.hpp"
 #include "accumulators/distribution_generator_csv.hpp"
 
 namespace apegrunt {
