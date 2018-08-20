@@ -1,5 +1,5 @@
-/** @file Loci.h
-
+/** @file Array_view_iterator_forward.h
+ 
 	Copyright (c) 2016-2017 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
@@ -18,14 +18,14 @@
 	@author Santeri Puranen
 	$Id: $
 */
+#ifndef APEGRUNT_ARRAY_VIEW_ITERATOR_FORWARD_H
+#define APEGRUNT_ARRAY_VIEW_ITERATOR_FORWARD_H
 
-#ifndef APEGRUNT_LOCI_H
-#define APEGRUNT_LOCI_H
+namespace apegrunt {
 
-#include "Loci_forward.h"
-#include "Loci_interface.hpp"
-#include "Loci_iterator.hpp"
-#include "Loci_operations.hpp"
+template< typename ArrayViewT >
+class Array_view_iterator;
 
-#endif // APEGRUNT_LOCI_H
+} // namespace apegrunt
 
+#endif // APEGRUNT_ARRAY_VIEW_ITERATOR_FORWARD_H

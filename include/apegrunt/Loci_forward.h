@@ -34,8 +34,7 @@ using Loci_ptr = std::shared_ptr< Loci >;
 template< typename LociT, typename... Args >
 Loci_ptr make_Loci_ptr( Args&&... args )
 {
-	return std::make_shared< LociT >( std::move(args...) );
-	//return Loci_ptr( new LociT( std::move( args... ) ) );
+	return std::make_shared< LociT >( std::forward<Args>(args)... );
 }
 
 template< typename LociT >

@@ -1,4 +1,4 @@
-/** @file Loci.h
+/** @file Vector_forward.h
 
 	Copyright (c) 2016-2017 Santeri Puranen.
 
@@ -19,13 +19,16 @@
 	$Id: $
 */
 
-#ifndef APEGRUNT_LOCI_H
-#define APEGRUNT_LOCI_H
+#ifndef APEGRUNT_VECTOR_FORWARD_H
+#define APEGRUNT_VECTOR_FORWARD_H
 
-#include "Loci_forward.h"
-#include "Loci_interface.hpp"
-#include "Loci_iterator.hpp"
-#include "Loci_operations.hpp"
+namespace apegrunt {
 
-#endif // APEGRUNT_LOCI_H
+// forward declarations
+template< typename RealT, uint N, bool View >
+struct Vector;
+
+} // namespace apegrunt
+
+#endif // APEGRUNT_VECTOR_FORWARD_H
 

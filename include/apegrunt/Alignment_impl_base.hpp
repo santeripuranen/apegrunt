@@ -49,12 +49,20 @@ public:
 	using frequencies_t = typename Alignment<state_t>::frequencies_t;
 	using frequencies_ptr = typename Alignment<state_t>::frequencies_ptr;
 
+	using w_frequency_t = typename Alignment<state_t>::w_frequency_t;
+	using w_frequencies_t = typename Alignment<state_t>::w_frequencies_t;
+	using w_frequencies_ptr = typename Alignment<state_t>::w_frequencies_ptr;
+
 	using distance_matrix_t = typename Alignment<state_t>::distance_matrix_t;
 	using distance_matrix_ptr = typename Alignment<state_t>::distance_matrix_ptr;
 
 	using block_index_t = typename Alignment<state_t>::block_index_t;
 	using block_accounting_t = typename Alignment<state_t>::block_accounting_t;
 	using block_accounting_ptr = typename Alignment<state_t>::block_accounting_ptr;
+
+	using block_weight_t = typename Alignment<state_t>::block_weight_t;
+	using block_weights_t = typename Alignment<state_t>::block_weights_t;
+	using block_weights_ptr = typename Alignment<state_t>::block_weights_ptr;
 
 	using block_storage_t = typename Alignment<state_t>::block_storage_t;
 	using block_storage_ptr = typename Alignment<state_t>::block_storage_ptr;
@@ -68,9 +76,10 @@ public:
 	void set_id_string( const std::string& id_string ) { m_id_string = id_string; }
 	void set_id_string( std::string&& id_string ) { m_id_string = std::move(id_string); }
 
-	std::size_t effective_size() const
+	typename w_frequency_t::value_type effective_size() const
 	{
-		return std::accumulate( this->cbegin_impl(), this->cend_impl(), std::size_t(0), [=](auto sum, const auto seq) { return sum += seq->multiplicity(); } );
+		using real_t = typename w_frequency_t::value_type;
+		return std::accumulate( this->cbegin_impl(), this->cend_impl(),real_t(0), [=](auto sum, const auto seq) { return sum += real_t(seq->multiplicity())*real_t(seq->weight()); } );
 	}
 
 	void fuse_duplicates()
@@ -107,7 +116,7 @@ public:
     	{
     		std::vector< std::size_t > loci; loci.reserve(this->n_loci_impl());
     		for( std::size_t i=0; i < this->n_loci_impl(); ++i ) { loci.push_back(i); }
-    		m_loci_translation_table = make_Loci_list(loci,0);
+    		m_loci_translation_table = make_Loci_list(std::move(loci),0);
     	}
 
     	return m_loci_translation_table;
@@ -115,6 +124,13 @@ public:
 
     void statistics( std::ostream *out ) const
     {
+    	// dummy implementation
+    }
+
+    block_weights_ptr get_block_weights()
+    {
+    	// dummy implementation
+    	return block_weights_ptr();
     }
 
     block_accounting_ptr get_block_accounting() { return block_accounting_ptr(); } // default implementation returns empty shared_ptr
@@ -141,7 +157,7 @@ private:
     value_type square_bracket_operator_impl( std::size_t index ) const override { return (*static_cast<const_cast_t>(this))[index]; }
 
     std::size_t size_impl() const override { return static_cast<const_cast_t>(this)->size(); }
-    std::size_t effective_size_impl() const override { return static_cast<const_cast_t>(this)->effective_size(); }
+    typename w_frequency_t::value_type effective_size_impl() const override { return static_cast<const_cast_t>(this)->effective_size(); }
 
     const std::string& id_string_impl() const override { return static_cast<const_cast_t>(this)->id_string(); };
     void set_id_string_impl( const std::string& id_string ) override { static_cast<cast_t>(this)->set_id_string(id_string); }
@@ -150,6 +166,7 @@ private:
     //std::size_t get_index_of_impl( const StateVector_ptr& query ) const override { return static_cast<const_cast_t>(this)->get_index_of(query); }
 
     frequencies_ptr frequencies_impl() override { return static_cast<cast_t>(this)->frequencies(); }
+    w_frequencies_ptr w_frequencies_impl() override { return static_cast<cast_t>(this)->w_frequencies(); }
 
     distance_matrix_ptr distance_matrix_impl() override { return static_cast<cast_t>(this)->distance_matrix(); }
 
@@ -166,6 +183,7 @@ private:
 
     block_accounting_ptr get_block_accounting_impl() override { return static_cast<cast_t>(this)->get_block_accounting(); }
     block_storage_ptr get_block_storage_impl() const override { return static_cast<const_ref_cast_t>(*this).get_block_storage(); }
+    block_weights_ptr get_block_weights_impl() override { return static_cast<cast_t>(this)->get_block_weights(); }
 
     iterator erase_impl( iterator first, iterator last ) { return static_cast<cast_t>(this)->erase(first,last); }
 

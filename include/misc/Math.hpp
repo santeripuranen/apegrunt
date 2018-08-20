@@ -1,5 +1,5 @@
-/** @file Loci.h
-
+/** @file Math.hpp
+ 
 	Copyright (c) 2016-2017 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
@@ -18,14 +18,40 @@
 	@author Santeri Puranen
 	$Id: $
 */
+#ifndef APEGRUNT_MATH_HPP
+#define APEGRUNT_MATH_HPP
 
-#ifndef APEGRUNT_LOCI_H
-#define APEGRUNT_LOCI_H
+namespace apegrunt {
 
-#include "Loci_forward.h"
-#include "Loci_interface.hpp"
-#include "Loci_iterator.hpp"
-#include "Loci_operations.hpp"
+/*
+// integer pow
+int ipow(int base, int exp)
+{
+    int result = 1;
+    while (exp)
+    {
+        if (exp & 1) { result *= base; }
+        exp >>= 1;
+        base *= base;
+    }
 
-#endif // APEGRUNT_LOCI_H
+    return result;
+}
+*/
+template< typename IntegerT >
+IntegerT ipow(IntegerT base, int exp)
+{
+	IntegerT result = 1;
+    while (exp)
+    {
+        if (exp & 1) { result *= base; }
+        exp >>= 1;
+        base *= base;
+    }
 
+    return result;
+}
+
+} // namespace apegrunt
+
+#endif // APEGRUNT_MATH_HPP

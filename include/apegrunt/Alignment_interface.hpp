@@ -61,6 +61,7 @@ class Alignment
 {
 public:
 	using state_t = StateT;
+	using real_t = double;
 
 	using const_iterator = apegrunt::iterator::Alignment_const_iterator<state_t>;
 	using iterator = apegrunt::iterator::Alignment_iterator<state_t>;
@@ -70,15 +71,23 @@ public:
 	using frequencies_t = std::vector<frequency_t>;
 	using frequencies_ptr = std::shared_ptr< frequencies_t >;
 
+	using w_frequency_t = std::array< real_t, number_of_states<state_t>::value >;
+	using w_frequencies_t = std::vector<w_frequency_t>;
+	using w_frequencies_ptr = std::shared_ptr< w_frequencies_t >;
+
 	using distance_matrix_t = std::vector<std::size_t>;
 	using distance_matrix_ptr = std::shared_ptr< distance_matrix_t >;
+
+	using block_weight_t = std::array< real_t, number_of_states<state_t>::value >;
+	using block_weights_t = std::vector< std::vector<block_weight_t> >;
+	using block_weights_ptr = std::shared_ptr< block_weights_t >;
 
 	using block_index_t = uint16_t;
 	using block_accounting_t = std::vector< std::vector< std::vector<block_index_t> > >;
 	using block_accounting_ptr = std::shared_ptr< block_accounting_t >;
 
 	using block_type = State_block< State_holder<state_t>, apegrunt::StateBlock_size >;
-	using compressed_block_type = Compressed_state_block< State_holder<state_t>, apegrunt::StateBlock_size >;
+//	using compressed_block_type = Compressed_state_block< State_holder<state_t>, apegrunt::StateBlock_size >;
 
 	using allocator_t = memory::AlignedAllocator<block_type,alignof(block_type)>;
 	using block_storage_t = std::vector< std::vector< block_type, allocator_t > >;
@@ -101,7 +110,7 @@ public:
     inline std::size_t size() const { return this->size_impl(); }
 
     //> Return the effective number of sequences contained in the alignment. Weights in sequence multiplicity (fused duplicates increase multiplicity), such that effective_size() >= size().
-    inline std::size_t effective_size() const { return this->effective_size_impl(); }
+    inline typename w_frequency_t::value_type effective_size() const { return this->effective_size_impl(); }
 
     inline const std::string& id_string() const { return this->id_string_impl(); }
 	inline void set_id_string( const std::string& id_string ) { this->set_id_string_impl(id_string); }
@@ -110,6 +119,7 @@ public:
     inline std::size_t n_loci() const { return this->n_loci_impl(); }
 
     inline frequencies_ptr frequencies() { return this->frequencies_impl(); }
+    inline w_frequencies_ptr w_frequencies() { return this->w_frequencies_impl(); }
 
     inline distance_matrix_ptr distance_matrix() { return this->distance_matrix_impl(); }
 
@@ -126,6 +136,7 @@ public:
 
 	inline block_accounting_ptr get_block_accounting() { return this->get_block_accounting_impl(); }
 	inline block_storage_ptr get_block_storage() const { return this->get_block_storage_impl(); }
+	inline block_weights_ptr get_block_weights() { return this->get_block_weights_impl(); }
 
 private:
 
@@ -140,7 +151,7 @@ private:
     virtual value_type square_bracket_operator_impl( std::size_t index ) const = 0;
 
     virtual std::size_t size_impl() const = 0;
-    virtual std::size_t effective_size_impl() const = 0;
+    virtual typename w_frequency_t::value_type effective_size_impl() const = 0;
 
     virtual const std::string& id_string_impl() const = 0;
     virtual void set_id_string_impl( const std::string& id_string ) = 0;
@@ -148,6 +159,7 @@ private:
     virtual std::size_t n_loci_impl() const = 0;
 
     virtual frequencies_ptr frequencies_impl() = 0;
+    virtual w_frequencies_ptr w_frequencies_impl() = 0;
 
     virtual distance_matrix_ptr distance_matrix_impl() = 0;
 
@@ -164,6 +176,7 @@ private:
 
     virtual block_accounting_ptr get_block_accounting_impl() = 0;
     virtual block_storage_ptr get_block_storage_impl() const = 0;
+    virtual block_weights_ptr get_block_weights_impl() = 0;
 };
 
 template< typename StateT > typename Alignment<StateT>::const_iterator begin( const Alignment<StateT>& alignment ) { return alignment.cbegin(); }

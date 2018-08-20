@@ -32,18 +32,10 @@ template< typename StateT >
 using StateVector_ptr = std::shared_ptr< StateVector< StateT > >;
 //using StateVector_ptr = std::shared_ptr< StateVector >;
 
-/*
 template< typename StateVectorT, typename... Args >
 StateVector_ptr< typename StateVectorT::state_t > make_StateVector_ptr( Args&&... args )
 {
-	return std::make_shared< StateVectorT >( std::move(args...) );
-	//return StateVector_ptr( new StateVectorT( args... ) );
-}
-*/
-template< typename StateVectorT, typename... Args >
-StateVector_ptr< typename StateVectorT::state_t > make_StateVector_ptr( Args&... args )
-{
-	return std::make_shared< StateVectorT >( args... );
+	return std::make_shared< StateVectorT >( std::forward<Args>(args)... );
 }
 
 template< typename StateVectorT >

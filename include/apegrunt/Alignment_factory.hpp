@@ -76,23 +76,57 @@ public:
 	Alignment_ptr<StateT> operator()( Alignment_ptr<StateT> alignment, const Loci_ptr accept_list ) const
 	{
 		using boost::get;
+		using std::cbegin; using std::cend;
 
 		auto new_alignment = std::make_shared<AlignmentT>();
-		new_alignment->set_id_string( alignment->id_string()+ ( !accept_list->id_string().empty() ? "."+accept_list->id_string() : "" ) );
+		new_alignment->set_id_string( alignment->id_string()+ ( accept_list->id_string().empty() ? "" : "."+accept_list->id_string() ) );
 		new_alignment->set_loci_translation( combine(alignment->get_loci_translation(), accept_list) );
 
+		//std::cout << " {create new alignment"; std::cout.flush();
+
+		//std::size_t i = 0;
 		for( const auto sequence: alignment )
 		{
 			auto new_sequence = StateVector_mutator<typename AlignmentT::statevector_t>( new_alignment->get_new_sequence( sequence->id_string() ) );
+
 			for( const auto locus_index: accept_list )
 			{
 				new_sequence( (*sequence)[locus_index] );
 			}
+			/*
+			auto pos = cbegin(sequence);
+			const auto end = cend(sequence);
+			std::size_t i=0;
+			for( const auto locus_index: accept_list )
+			{
+				while( locus_index != i ) { ++i; if( end == ++pos ) { break; } }
+				//std::cout << " (" << locus_index << "," << *pos << ")"; std::cout.flush();
+				new_sequence( *pos );
+				//new_sequence( (*sequence)[locus_index] );
+			}
+			*/
 		}
-		new_alignment->get_block_accounting();
+		//new_alignment->get_block_accounting();
+		//std::cout << "}" << std::endl;
 		return new_alignment;
 	}
 
+	// include selected loci
+	template< typename StateT >
+	Alignment_ptr<StateT> include( Alignment_ptr<StateT> alignment, const Loci_ptr include_list ) const
+	{
+		return this->operator()( alignment, include_list );
+	}
+
+	// exclude selected loci
+	template< typename StateT >
+	Alignment_ptr<StateT> exclude( Alignment_ptr<StateT> alignment, const Loci_ptr exclude_list ) const
+	{
+		const auto include_list = alignment->get_loci_translation() - exclude_list; // set difference
+		return this->operator()( alignment, include_list );
+	}
+
+	// copy selected samples
 	template< typename StateT, typename IterableT >
 	Alignment_ptr<StateT> copy_selected( Alignment_ptr<StateT> alignment, const IterableT accept_list, const std::string& sample_name="sample" ) const
 	{
@@ -108,7 +142,26 @@ public:
 			auto new_sequence = StateVector_mutator<typename AlignmentT::statevector_t>( new_alignment->get_new_sequence( sequence->id_string() ) );
 			for( const auto state: sequence ) {	new_sequence(state); }
 		}
-		new_alignment->get_block_accounting();
+		//new_alignment->get_block_accounting();
+		return new_alignment;
+	}
+
+	template< typename StateT >
+	Alignment_ptr<StateT> transpose( const Alignment_ptr<StateT> alignment ) const
+	{
+		auto new_alignment = std::make_shared<AlignmentT>();
+		new_alignment->set_id_string( alignment->id_string()+".transposed" );
+
+		for( std::size_t pos = 0; pos < alignment->n_loci(); ++pos )
+		{
+
+			auto new_sequence = StateVector_mutator< typename AlignmentT::statevector_t >( new_alignment->get_new_sequence( std::to_string(pos) ) );
+
+			for( const auto sequence: alignment )
+			{
+				new_sequence( (*sequence)[pos] );
+			}
+		}
 		return new_alignment;
 	}
 
@@ -153,7 +206,25 @@ public:
 				}
 			}
 		}
-		new_alignment->get_block_accounting();
+		//new_alignment->get_block_accounting();
+		return new_alignment;
+	}
+
+	Alignment_ptr<triallelic_state_t> transpose( const Alignment_ptr<triallelic_state_t> alignment ) const
+	{
+		auto new_alignment = std::make_shared<alignment_t>();
+		new_alignment->set_id_string( alignment->id_string()+".transposed" );
+
+		for( std::size_t pos = 0; pos < alignment->n_loci(); ++pos )
+		{
+
+			auto new_sequence = StateVector_mutator< block_storage_t >( new_alignment->get_new_sequence( std::to_string(pos) ) );
+
+			for( const auto sequence: alignment )
+			{
+				new_sequence( (*sequence)[pos] );
+			}
+		}
 		return new_alignment;
 	}
 
@@ -173,7 +244,7 @@ public:
 				new_sequence( (*sequence)[locus_index] );
 			}
 		}
-		new_alignment->get_block_accounting();
+		//new_alignment->get_block_accounting();
 		return new_alignment;
 	}
 

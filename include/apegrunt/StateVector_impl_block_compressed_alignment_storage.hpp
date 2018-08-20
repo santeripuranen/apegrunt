@@ -46,6 +46,8 @@
 #include "Alignment_impl_block_compressed_storage.hpp"
 #include "aligned_allocator.hpp"
 
+#include "IndexVector.h"
+
 namespace apegrunt {
 
 template< typename StateT >
@@ -60,10 +62,15 @@ public:
 	enum { N=block_type::N };
 
 	using parent_t = Alignment_impl_block_compressed_storage< my_type >;
-
+/*
 	using block_index_t = uint16_t;
-	using block_index_container_t = std::vector< block_index_t >;
+	//using block_index_container_t = std::vector< block_index_t >;
+	using block_index_container_t = IndexVector< block_index_t >;
 	using frequencies_type = std::array< std::size_t, number_of_states<state_t>::value >;
+*/
+	using block_index_t = typename base_type::block_index_t;
+	using block_index_container_t = typename base_type::block_index_container_t;
+	using frequencies_type = typename base_type::frequencies_type;
 
 	using allocator_t = memory::AlignedAllocator<block_type,alignof(block_type)>;
 	using block_storage_t = std::vector< std::vector< block_type, allocator_t > >;
@@ -157,7 +164,16 @@ public:
     inline value_type operator[]( std::size_t index ) const
     {
     	const auto a = std::div( index, N );
-    	return this->get_block(a.quot)[a.rem];
+
+    	if( a.quot != m_access_cache_col )
+    	{
+    		this->get_block(a.quot);
+    		//m_access_cache_col = a.quot;
+    		//m_access_cache_block = this->get_block(m_access_cache_col); // get_block will populate the cache
+    	}
+   		return m_access_cache_block[a.rem];
+
+    	//return this->get_block(a.quot)[a.rem];
     }
 
     bool operator==( const my_type& rhs ) const
@@ -193,14 +209,28 @@ public:
 		// guard against invalid block indices from user code..
 		if( index < m_block_indices.size() )
 		{
-			return (*m_block_storage)[index][ m_block_indices[index] ]; // ..but trust that we are internally consistent
+			if( index != m_access_cache_col )
+			{
+				m_access_cache_col = index;
+				m_access_cache_block = (*m_block_storage)[index][ m_block_indices[index] ];
+			}
+			return m_access_cache_block;
+			//return (*m_block_storage)[index][ m_block_indices[index] ]; // ..but trust that we are internally consistent
 		}
 		else
 		{
+			// Disable error message in Release mode. We will regularly hit this condition when using iterator access and the size of
+			// StateVector is an even multiple of BlockSize: the caching iterator will preload blocks when incremented, even when incremented
+			// to one-past-end (i.e. iterator == iterator.end(), which should be caught in calling code). End users need not be burdened with the
+			// confusing error message, as the condition is completely benign in that case.
+#ifndef NDEBUG
 			*Apegrunt_options::get_err_stream() << "apegrunt::StateVector: block index=" << index << " out_of_range" << std::endl;
+#endif // NDEBUG
 			return block_type();
 		}
     }
+
+    inline const block_index_container_t& get_block_indices() const { return m_block_indices; }
 
     inline const frequencies_type& frequencies() const { return m_frequencies; }
 
@@ -213,8 +243,9 @@ public:
 		{
 			for( std::size_t i = 0; i < n_indices; ++i )
 			{
-				if( m_block_indices[i] == rhs.m_block_indices[i] ) { n+=N; } // compare pair indices
-				else { n += count_identical( this->get_block(i), rhs.get_block(i) ); }
+				n += m_block_indices[i] == rhs.m_block_indices[i] ? N : count_identical( this->get_block(i), rhs.get_block(i) );
+				//if( m_block_indices[i] == rhs.m_block_indices[i] ) { n+=N; } // compare pair indices
+				//else { n += count_identical( this->get_block(i), rhs.get_block(i) ); }
 			}
 		}
 		else
@@ -254,6 +285,8 @@ private:
 	Block_Storage_ptr m_block_storage;
 	block_index_container_t m_block_indices;
 	block_type m_cache;
+	mutable block_type m_access_cache_block;
+	mutable std::size_t m_access_cache_col;
 	std::array< std::size_t, number_of_states<state_t>::value > m_frequencies;
 	std::size_t m_block_col;
 	std::size_t m_pos;
@@ -303,6 +336,12 @@ private:
 	{
 		if(m_dirty)
 		{
+			/*
+			std::size_t count = 0;
+			for( std::size_t i = 0; i < N; ++i ) { count += ( i%2 != 0 ? (m_cache[i-1] == m_cache[i]) : 0 ); }
+			std::cout << "duals=" << count << "\n";
+			*/
+
 			if( m_block_storage->size() < m_block_col+1 ) { m_block_storage->emplace_back( 1, m_cache ); /*m_block_storage->back().reserve(10);*/ m_block_indices.push_back(0); }
 			else
 			{
@@ -321,6 +360,10 @@ private:
 			this->update_frequencies();
 			if( N  == m_pos ) // test if cache is full or partially filled
 			{
+				// update access cache
+				m_access_cache_block = m_cache;
+				m_access_cache_col = m_block_col;
+				// reset construction cache and update column position
 				m_cache.clear(); m_pos=0; ++m_block_col;
 			}
 			m_dirty=false;

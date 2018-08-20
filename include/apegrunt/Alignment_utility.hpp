@@ -27,6 +27,7 @@
 #include <sstream>
 #include <iomanip> // std::setfill, std::setw
 #include <random> // C++11
+#include <type_traits> // std::true_type
 
 #include "Apegrunt_utility.hpp"
 #include "Threshold_rule.hpp"
@@ -42,7 +43,17 @@
 
 #include "aligned_allocator.hpp"
 
+#include "accumulators/distribution_std.hpp"
+#include "accumulators/distribution_bincount.hpp"
+#include "accumulators/distribution_ordered.hpp"
+#include "accumulators/distribution_cumulative.hpp"
+#include "accumulators/distribution_generator_svg.hpp"
+#include "accumulators/distribution_generator_csv.hpp"
+
 namespace apegrunt {
+
+template< typename StateT >
+std::string size_string( Alignment_ptr<StateT> alignment ) { std::ostringstream label; label << "L" << alignment->n_loci() << "n" << alignment->size(); return label.str(); }
 
 std::size_t norm2( const std::vector< std::size_t >& v )
 {
@@ -84,35 +95,72 @@ std::vector< std::array< std::size_t, number_of_states<StateT>::N > > allele_occ
 template< typename StateT, typename RealT=double >
 std::vector< std::array< RealT, number_of_states<StateT>::N > > columnwise_frequencies( const Alignment_ptr<StateT> alignment )
 {
-	using state_t = StateT;
-	enum { N=number_of_states<state_t>::N };
+	//std::cout << " {get column frequencies list"; std::cout.flush();
 	using real_t = RealT;
+	enum { N=number_of_states<StateT>::N };
 	using boost::get;
 
 	std::vector< std::array<real_t,N> > freq_vec( alignment->n_loci() ); //, {0.0} );
+	const auto neff = real_t( alignment->size() ); // effective number of samples (sequences)
 
-	//const auto Mint = alignment->size(); // number of samples (sequences)
-	const auto Mint = alignment->effective_size(); // effective number of samples (sequences)
-	if( 0 != Mint ) // protect against division by zero
+	if( 0 < neff ) // protect against division by zero
 	{
-		//std::cout << "Get allele occurrence" << std::endl;
-		const real_t M = real_t( Mint );
-
-		const auto occ_vec = alignment->frequencies();
-		//const auto occ_vec = allele_occurrence( alignment );
-		//std::cout << "  ..done" << std::endl;
+		const auto occ_vec = alignment->frequencies(); // unweighted column biases
 
 		for( auto&& occ_and_freq: zip_range(occ_vec, freq_vec) ) // loop over all loci
 		{
-			//const real_t MwithoutGaps = boost::get<0>(occ_and_freq)[N-1] != 0 ? M - boost::get<0>(occ_and_freq)[N-1] : M;
-			//std::transform( begin(get<0>(occ_and_freq)), end(get<0>(occ_and_freq)), begin(get<1>(occ_and_freq)), [=](auto occ){ return real_t(occ)/MwithoutGaps; } );
-			// loop over all states at the current locus
-			std::transform( cbegin(get<0>(occ_and_freq)), cend(get<0>(occ_and_freq)), begin(get<1>(occ_and_freq)), [=](auto occ){ return real_t(occ)/M; } );
+			std::transform( cbegin(get<0>(occ_and_freq)), cend(get<0>(occ_and_freq)), begin(get<1>(occ_and_freq)), [=](auto occ){ return real_t(occ)/neff; } );
+		}
+	}
+	//std::cout << "}"; std::cout.flush();
+
+	return freq_vec;
+}
+
+template< typename StateT, typename RealT=double >
+std::vector< std::array< RealT, number_of_states<StateT>::N > > weighted_columnwise_frequencies( const Alignment_ptr<StateT> alignment )
+{
+	using real_t = RealT;
+	enum { N=number_of_states<StateT>::N };
+	using boost::get;
+
+	std::vector< std::array<real_t,N> > freq_vec( alignment->n_loci() ); //, {0.0} );
+	const auto neff = real_t( alignment->effective_size() ); // effective number of samples (sequences)
+
+	//std::cout << "apegrunt: neff=" << neff << std::endl;
+
+	if( 0 < neff ) // protect against division by zero
+	{
+		const auto occ_vec = alignment->w_frequencies(); // weighted column biases
+
+		for( auto&& occ_and_freq: zip_range(occ_vec, freq_vec) ) // loop over all loci
+		{
+			std::transform( cbegin(get<0>(occ_and_freq)), cend(get<0>(occ_and_freq)), begin(get<1>(occ_and_freq)), [=](auto occ){ return real_t(occ)/neff; } );
 		}
 	}
 
 	return freq_vec;
 }
+
+
+// To use, inherit from extend_comparison_operators and
+// define these public operators in your struct/class:
+// inline bool T::operator==( const T& rhs ) const
+// inline bool operator<( const my_type& rhs ) const
+struct extend_comparison_operators { using enable_extended_comparison_operators = std::true_type; };
+
+template< typename T, typename std::enable_if< std::is_same< typename T::enable_extended_comparison_operators,std::true_type >::type >::type >
+inline bool operator!=( const T& lhs, const T& rhs ) { return !(lhs == rhs); }
+
+template< typename T, typename std::enable_if< std::is_same< typename T::enable_extended_comparison_operators,std::true_type >::type >::type >
+inline bool operator> ( const T& lhs, const T& rhs ) { return (rhs < lhs); }
+
+template< typename T, typename std::enable_if< std::is_same< typename T::enable_extended_comparison_operators,std::true_type >::type >::type >
+inline bool operator<=( const T& lhs, const T& rhs ) { return !(lhs > rhs); }
+
+template< typename T, typename std::enable_if< std::is_same< typename T::enable_extended_comparison_operators,std::true_type >::type >::type >
+inline bool operator>=( const T& lhs, const T& rhs ) { return !(lhs < rhs); }
+
 
 class Alignment_filter
 {
@@ -153,16 +201,20 @@ public:
 	{
 		if( Apegrunt_options::filter_alignment() )
 		{
-			const auto accept_list = get_filter_list( alignment );
+			//std::cout << "apegrunt: get filter list"; std::cout.flush();
+			const auto accept_list = this->get_filter_list( alignment );
+			//std::cout << " done" << std::endl;
 
 			std::ostringstream id_stream;
 			id_stream << "filtered";
 			id_stream << "_ge" << std::setw(3) << std::setfill('0') << std::size_t(m_maf_threshold*100.) << "maf";
 			id_stream << "_le" << std::setw(3) << std::setfill('0') << std::size_t(m_gap_threshold*100.) << "gf";
-			id_stream << "_" << m_state_rule.safe_string() << "-lt04alleles";
+			id_stream << "_" << m_state_rule.safe_string() << "-lt04states";
+			//id_stream << "_L" << accept_list->size() << "n" << alignment->size();
 
 			accept_list->set_id_string( id_stream.str() );
 
+			//std::cout << "apegrunt: create new alignment"; std::cout.flush();
 			return Alignment_factory< FilteredAlignmentT >()( alignment, accept_list );
 		}
 		else
@@ -177,13 +229,48 @@ private:
 	double m_maf_threshold;
 	Threshold_rule<int> m_state_rule;
 
+	struct index_and_state_count_association : public extend_comparison_operators
+	{
+		using my_type = index_and_state_count_association;
+
+		index_and_state_count_association( const std::size_t& count, const std::size_t& index ) : state_count(count), locus_index(index) { }
+
+		index_and_state_count_association( const my_type& other ) : state_count(other.state_count), locus_index(other.locus_index) { }
+
+		inline bool operator==( const my_type& rhs ) const
+		{
+			return state_count == rhs.state_count;
+		}
+
+		inline bool operator<( const my_type& rhs ) const
+		{
+			return state_count < rhs.state_count;
+		}
+
+		std::size_t state_count;
+		std::size_t locus_index;
+	};
+/*
+	template< typename ContainerT, typename T >
+	struct back_inserter {
+		back_inserter( ContainerT& container, const T& ) : m_container(container) { }
+		template< typename T > T& operator()( const T& a ) { m_container.push_back(a.state)
+	};
+*/
 	template< typename StateT >
 	Loci_ptr get_filter_list( const Alignment_ptr<StateT> alignment ) const
 	{
+		//std::cout << " {get filter list"; std::cout.flush();
 		using state_t = StateT;
+		using std::begin; using std::end; using std::cbegin; using std::cend;
 
+		std::array<std::size_t,number_of_states<state_t>::value> statef; for( auto& s: statef ) { s=0; }
+
+		std::vector<index_and_state_count_association> proto_accept_list;
 		std::vector<std::size_t> accept_list;
+		//std::cout << "apegrunt: get columnwise frequencies"; std::cout.flush();
 		const auto freq_vec = columnwise_frequencies( alignment );
+		//std::cout << " done" << std::endl;
 
 		std::size_t total_SNPs=0;
 		std::size_t current_locus=0;
@@ -194,56 +281,116 @@ private:
 
 			std::size_t n_significant = 0;
 			std::size_t n_nz = 0;
+			std::size_t totaln_nz = 0;
 
-			for( std::size_t i = 0; i < n; ++i )
+			for( std::size_t i = 0; i < number_of_states<state_t>::value; ++i )
 			{
-				freq[i] > 0 && ++n_nz && m_maf_threshold <= freq[i] && ++n_significant; // mark state as significant if its frequency is at least maf_threshold
+				freq[i] > 0 && ++totaln_nz;
 			}
 
-			if( m_state_rule(n_significant) && (freq[std::size_t(state_t::GAP)] <= m_gap_threshold) )
+			//std::cout << "[";
+			for( std::size_t i = 0; i < n; ++i )
 			{
-					accept_list.push_back(current_locus);
+				//std::cout << " " << freq[i];
+				freq[i] > 0 && ++n_nz && m_maf_threshold <= freq[i] && ++n_significant; // mark state as significant if its frequency is at least maf_threshold
+			}
+			//std::cout << " ]\n";
+
+			if( m_state_rule(n_significant) && n_nz < 4 && (freq[std::size_t( gap_state<state_t>::value )] <= m_gap_threshold) ) // && n_nz == n_significant )
+			{
+				accept_list.push_back(current_locus);
+				//proto_accept_list.emplace_back(n_nz,current_locus);
 			}
 
 			n_nz > 1 && ++total_SNPs;
 
+			statef[totaln_nz] += 1;
+
 			++current_locus;
 		}
 
-		if( Apegrunt_options::verbose() )
+		std::cout << "\n";
+		for( std::size_t i=number_of_states<state_t>::value-1; i != 0; --i )
 		{
-			*Apegrunt_options::get_out_stream() << "apegrunt: total number of SNPs is " << total_SNPs << "\n";
+			std::cout << "number of " << i+1 << "-state positions = " << statef[i] << std::endl;
 		}
+		//for( std::size_t i=0; i < statef.size(); ++i ) { std::cout << "apegrunt: " << i << " state = " << statef[i] << "\n"; }
+/*
+		accept_list.reserve(proto_accept_list.size());
+		std::sort(begin(proto_accept_list),end(proto_accept_list));
+		for( const auto& a: proto_accept_list ) { accept_list.push_back(a.locus_index); }
+*/
+		// move last element to first place
+//		accept_list.insert(accept_list.begin(), accept_list[accept_list.size()-1]); accept_list.pop_back();
 
-		return make_Loci_list(accept_list,0);
+		//std::cout << "}"; std::cout.flush();
+		return make_Loci_list(std::move(accept_list),0);
 	}
 
 };
 
 template< typename StateT >
-void output_frequencies( const Alignment_ptr<StateT> alignment )
+bool output_frequencies( const Alignment_ptr<StateT> alignment, std::ostream *os=nullptr, bool weighted=false )
 {
-	fs::path filepath( alignment->id_string() + ".frequencies.txt" );
-	if( !fs::exists( filepath ) )
+	if( os && os->good() )
 	{
-		std::ofstream freqfile( filepath.c_str(), std::ios_base::binary );
-		freqfile.precision(3); freqfile.width(8);
-
-		if( Apegrunt_options::verbose() )
-		{
-			*Apegrunt_options::get_out_stream() << "apegrunt: write columnwise state frequencies for alignment \"" << alignment->id_string() << "\" to file " << filepath << "\n";
-		}
-		const auto freq_vec = columnwise_frequencies( alignment );
-
+		//os->precision(3); //os->width(8);
+		const auto freq_vec = weighted ? weighted_columnwise_frequencies( alignment ) : columnwise_frequencies( alignment );
 		for( const auto& freq: freq_vec ) // loop over all sequence positions
 		{
 			for( const auto& f: freq )
 			{
-				freqfile << f << " ";
+				*os << f << " ";
 			}
-			freqfile << "\n";
+			*os << "\n";
 		}
+		return true;
 	}
+	return false;
+}
+
+template< typename StateT >
+bool output_frequency_distribution( const Alignment_ptr<StateT> alignment, std::ostream *os=nullptr, bool weighted=false )
+{
+	namespace acc = boost::accumulators;
+	using real_t = double;
+
+	if( os && os->good() )
+	{
+		acc::accumulator_set<real_t, acc::stats<acc::tag::std(acc::from_distribution),acc::tag::distribution_bincount> >
+		frequency_distribution( acc::tag::distribution::binwidth=0.01 );
+		//os->precision(3); //os->width(8);
+		const auto freq_vec = weighted ? weighted_columnwise_frequencies( alignment ) : columnwise_frequencies( alignment );
+		frequency_distribution << freq_vec;
+		*os << apegrunt::accumulators::csv(acc::distribution(frequency_distribution));
+		return true;
+	}
+	return false;
+}
+
+template< typename StateT >
+bool output_sample_distance_matrix( const Alignment_ptr<StateT> alignment, std::ostream *os=nullptr )
+{
+	if( os && os->good() )
+	{
+		auto distance_matrix_ptr = alignment->distance_matrix();
+		const auto& distance_matrix = *(distance_matrix_ptr.get());
+		const auto n_samples = alignment->size();
+
+		*os << "n=" << n_samples;
+		for( std::size_t i = 0; i < n_samples; ++i )
+		{
+			//const auto sample_i = distance_matrix[i];
+			for( std::size_t j = 0; j < i; ++j )
+			{
+				*os << distance_matrix[i*(i-1)/2+j] << " ";
+			}
+			*os << "\n";
+		}
+
+		return true;
+	}
+	return false;
 }
 
 template< typename AlignmentT, typename RealT >
@@ -254,9 +401,9 @@ sequence_sample(
 		std::size_t random_seed=0 // if random_seed==0, then generate a new random random seed
 	)
 {
-	using real_t = RealT;
-	using alignment_t = AlignmentT;
-	using state_t = typename AlignmentT::state_t;
+	//using real_t = RealT;
+	//using alignment_t = AlignmentT;
+	//using state_t = typename alignment_t::state_t;
 
 	// initialize random number generator
 	if( 0 == random_seed )
@@ -315,7 +462,7 @@ inline bool operator>=( const state_frequency_pair<StateT,RealT>& lhs, const sta
 template< typename StateT >
 Loci_ptr maf_based_alignment_reordering( const Alignment_ptr<StateT> alignment )
 {
-	using state_t = StateT;
+	//using state_t = StateT;
 	using locus_frequency_pair = detail::state_frequency_pair< std::size_t, double >;
 	using std::begin; using::std::end;
 
@@ -337,7 +484,7 @@ Loci_ptr maf_based_alignment_reordering( const Alignment_ptr<StateT> alignment )
 		new_ordering.push_back( lfpair.state );
 	}
 
-	return make_Loci_list(new_ordering,0);
+	return make_Loci_list(std::move(new_ordering),0);
 }
 
 template< typename StateT >
@@ -370,7 +517,7 @@ Loci_ptr state_flip_based_alignment_reordering( const Alignment_ptr<StateT> alig
 		new_ordering.push_back( flippair.state );
 	}
 
-	return make_Loci_list(new_ordering,0);
+	return make_Loci_list(std::move(new_ordering),0);
 }
 
 template< typename StateT >
@@ -403,7 +550,7 @@ Loci_ptr get_alignment_reordering( const Alignment_ptr<StateT> alignment )
 		new_ordering.push_back( flippair.state );
 	}
 
-	return make_Loci_list(new_ordering,0);
+	return make_Loci_list(std::move(new_ordering),0);
 }
 
 template< typename DestStateT, typename SrcStateT >
@@ -414,11 +561,6 @@ std::vector< std::vector< State_holder<SrcStateT> > > get_transform_list( const 
 	using state_t = DestStateT;
 	enum { N=number_of_states<state_t>::N };
 	using sf_pair_t = detail::state_frequency_pair< State_holder<oldstate_t>, double >;
-	//std::cout << "Nold=" << Nold << " N=" << N << std::endl;
-
-	//using allocator_t = memory::AlignedAllocator< State_holder<oldstate_t>, alignof(State_holder<oldstate_t>) >;
-
-	using std::begin; using::std::end;
 
 	const auto maf_threshold = Apegrunt_options::get_minor_allele_frequency_threshold();
 
@@ -434,18 +576,35 @@ std::vector< std::vector< State_holder<SrcStateT> > > get_transform_list( const 
 	std::size_t n_dropped = 0;
 	std::size_t n_loci_with_dropped_alleles = 0;
 
+//	std::array< state_t, number_of_states<state_t>::value > state_map;
+
+	//std::vector<std::size_t> dropped_positions;
+
 	//std::size_t locus=0;
 	for( const auto& freq: freq_vec ) // loop over all sequence positions
 	{
+/*
+		std::map<state_t,double> statecache;
+		for( std::size_t i = 0; i < Nold-1; ++i )
+		{
+			if( freq[i] > 0 )
+			{
+				statecache[i].freq = freq[i];
+			}
+		}
+*/
 		//std::array< sf_pair_t, number_of_states<oldstate_t>::N > statecache = {{ {oldstate_t::a,0}, {oldstate_t::t,0}, {oldstate_t::c,0}, {oldstate_t::g,0}, {oldstate_t::GAP,0} }};
-		std::array< sf_pair_t, Nold-1 > statecache = {{ {oldstate_t::a,0}, {oldstate_t::t,0}, {oldstate_t::c,0}, {oldstate_t::g,0} }};
-		for( std::size_t i = 0; i < Nold-1; ++i ) { statecache[i].freq = freq[i];/* std::cout << " " << State_holder<oldstate_t>(statecache[i].state) << "=" << freq[i]*100;*/ }/* std::cout << std::endl;*/
+		std::array< sf_pair_t, Nold-1 > statecache = {{ {oldstate_t::a,freq[0]}, {oldstate_t::t,freq[1]}, {oldstate_t::c,freq[2]}, {oldstate_t::g,freq[3]} }};
+		//for( std::size_t i = 0; i < Nold-1; ++i ) { statecache[i].freq = freq[i];/* std::cout << " " << State_holder<oldstate_t>(statecache[i].state) << "=" << freq[i]*100;*/ }/* std::cout << std::endl;*/
+
+		using std::begin; using::std::end;
 		std::sort( begin(statecache), end(statecache), std::greater<sf_pair_t>() );
 /*
 		std::cout << "post-sorting: ";
 		for( std::size_t i = 0; i < Nold; ++i ) { std::cout << " \"" << State_holder<oldstate_t>(statecache[i].state) << "\"=" << statecache[i].freq*100; } std::cout << std::endl;
 */
 		//if( statecache[Nold].freq > 0 ) { accept_list[current_locus].push_back( oldstate_t::GAP ); }
+
 
 		const auto n_dropped_old = n_dropped;
 		for( std::size_t i = N-1; i < Nold-1; ++i ) { statecache[i].freq > 0 && ++n_dropped; }
@@ -455,6 +614,7 @@ std::vector< std::vector< State_holder<SrcStateT> > > get_transform_list( const 
 			++n_loci_with_dropped_alleles;
 			if( maf_threshold <= statecache[N-1].freq )
 			{
+				//dropped_positions.push_back( (*alignment->get_loci_translation())[transform_list.size()-1]+Apegrunt_options::get_input_indexing_base() );
 				if( Apegrunt_options::verbose() )
 				{
 					auto out = Apegrunt_options::get_out_stream();
@@ -484,14 +644,30 @@ std::vector< std::vector< State_holder<SrcStateT> > > get_transform_list( const 
 		++current_locus;
 	}
 
-	if( Apegrunt_options::verbose() && n_dropped > 0 )
+	if( n_dropped > 0 )
 	{
-		*Apegrunt_options::get_out_stream() << "apegrunt: NOTE: " << n_loci_with_dropped_alleles << " loci will be dropped (" << n_dropped << " alleles in total)" << std::endl;
+		if( Apegrunt_options::verbose() )
+		{
+			*Apegrunt_options::get_out_stream() << "apegrunt: NOTE: " << n_loci_with_dropped_alleles << " loci will be dropped (" << n_dropped << " alleles in total)" << std::endl;
+		}
+	/*
+		auto dropped_pos_file = apegrunt::get_unique_ofstream( alignment->id_string()+"."+apegrunt::size_string(alignment)+".dropped" );
+
+		if( Apegrunt_options::verbose() )
+		{
+			*Apegrunt_options::get_out_stream() << "apegrunt: write dropped positions to file " << dropped_pos_file->name() << "\n";
+		}
+		auto out = dropped_pos_file->stream();
+		for( const auto pos: dropped_positions )
+		{
+			*out << pos << "\n";
+		}
+	*/
 	}
 
 	//std::cout << "apegrunt: accept list has " << accept_list.size() << " entries." << std::endl;
 
-	loci_list = make_Loci_list(accept_list,0);
+	loci_list = make_Loci_list(std::move(accept_list),0);
 
 	return transform_list;
 }
@@ -507,6 +683,16 @@ Alignment_ptr<DestStateT> transform_alignment( const Alignment_ptr<SrcStateT> al
 
 	return Alignment_factory< Alignment_impl_block_compressed_storage< StateVector_impl_block_compressed_alignment_storage<DestStateT> > >()( transformable_alignment, std::move(transform_list) );
 }
+
+template< typename StateT >
+Alignment_ptr<StateT> transpose_alignment( const Alignment_ptr<StateT> alignment )
+{
+	using alignment_t = Alignment_impl_block_compressed_storage< StateVector_impl_block_compressed_alignment_storage<StateT> >;
+
+	return Alignment_factory< Alignment_impl_block_compressed_storage< StateVector_impl_block_compressed_alignment_storage<StateT> > >().transpose( alignment );
+}
+
+
 
 } // namespace apegrunt
 

@@ -1,4 +1,4 @@
-/** @file Loci.h
+/** @file Vector.h
 
 	Copyright (c) 2016-2017 Santeri Puranen.
 
@@ -19,13 +19,12 @@
 	$Id: $
 */
 
-#ifndef APEGRUNT_LOCI_H
-#define APEGRUNT_LOCI_H
+#ifndef APEGRUNT_VECTOR_H
+#define APEGRUNT_VECTOR_H
 
-#include "Loci_forward.h"
-#include "Loci_interface.hpp"
-#include "Loci_iterator.hpp"
-#include "Loci_operations.hpp"
+#include "Vector_forward.h"
+#include "Vector_interface.hpp"
+#include "Vector_operations.hpp"
 
-#endif // APEGRUNT_LOCI_H
+#endif // APEGRUNT_VECTOR_H
 

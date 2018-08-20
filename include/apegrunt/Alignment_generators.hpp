@@ -56,6 +56,33 @@ bool generate_Alignment( Alignment_ptr<StateT> alignment, std::ostream* outstrea
 	return false;
 }
 
+template< typename StateT >
+bool generate_PhandangoCSV( Alignment_ptr<StateT> alignment, std::ostream* outstream )
+{
+	if( outstream && outstream->good() )
+	{
+		auto index_translation = alignment->get_loci_translation();
+		const std::size_t base_index = apegrunt::Apegrunt_options::get_output_indexing_base();
+
+		// create header
+		*outstream << "\"locus\"";
+		for( const auto& index : alignment->get_loci_translation() ) { *outstream << ",\"L" << index+base_index << ":o1\""; }
+		*outstream << ",\"L" << *begin(alignment->get_loci_translation())+base_index << ":o1\"";
+		*outstream << "\n";
+
+		// the payload
+		for( const auto& sequence: alignment )
+		{
+			*outstream << "\"" << sequence->id_string() << "\"";
+			for( const auto& state: sequence ) { *outstream << ",\"" << state << "\""; }
+			*outstream << ",\"" << *(begin(sequence)) << "\"";
+			*outstream << "\n";
+		}
+		return true;
+	}
+	return false;
+}
+
 /*
 // Boost Spirit Karma generator
 template< typename StateT >
