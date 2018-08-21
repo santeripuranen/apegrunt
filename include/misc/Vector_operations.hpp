@@ -21,10 +21,6 @@
 #ifndef APEGRUNT_VECTOR_OPERATIONS_HPP
 #define APEGRUNT_VECTOR_OPERATIONS_HPP
 
-#ifndef APEGRUNT_NO_VECMATHLIB
-#include "vecmathlib.h"
-#endif
-
 #include "Vector_forward.h"
 #include "Vector_interface.hpp"
 
@@ -32,6 +28,7 @@ namespace apegrunt {
 
 #ifndef NO_INTRINSICS
 #ifdef __AVX__
+
 inline double sum( __m256d a )
 {
 	using vec_t = Vector<double,4,false>;
@@ -48,21 +45,7 @@ inline __m256d pow( __m256d x ) { __m256d result = x; for( std::size_t i=1; i<Ex
 template<>
 inline __m256d pow<2>( __m256d x ) { return x*x; }
 
-#ifndef APEGRUNT_NO_VECMATHLIB
-inline __m256d exp( __m256d a ) { return vecmathlib::mathfuncs< vecmathlib::realvec<double,4> >::vml_exp( a ).v; }
-inline __m256d abs( __m256d a ) { return vecmathlib::mathfuncs< vecmathlib::realvec<double,4> >::vml_fabs( a ).v; }
-#else
-/*
-template< bool View >
-inline Vector<double,4,View> exp( typename Vector<double,4,View>::simd_t a )
-{
-	return vecmathlib::mathfuncs< vecmathlib::realvec<double,4> >::vml_exp( a ).v;
-}
-*/
-#endif // #ifndef APEGRUNT_NO_VECMATHLIB
-
 #endif // __AVX__
-
 #endif // #ifndef NO_INTRINSICS
 
 } // namespace apegrunt
