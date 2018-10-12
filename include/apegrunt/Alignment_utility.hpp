@@ -310,9 +310,10 @@ private:
 		}
 
 		std::cout << "\n";
-		for( std::size_t i=number_of_states<state_t>::value-1; i != 0; --i )
+		for( std::size_t i=number_of_states<state_t>::value; i != 0; --i )
 		{
-			std::cout << "number of " << i+1 << "-state positions = " << statef[i] << std::endl;
+			std::cout << "number of " << i << "-state positions = " << statef[i] << std::endl;
+			//std::cout << "number of " << i+1 << "-state positions = " << statef[i] << std::endl;
 		}
 		//for( std::size_t i=0; i < statef.size(); ++i ) { std::cout << "apegrunt: " << i << " state = " << statef[i] << "\n"; }
 /*
