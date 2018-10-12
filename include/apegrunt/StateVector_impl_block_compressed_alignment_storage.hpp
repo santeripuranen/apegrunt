@@ -63,8 +63,8 @@ public:
 
 	using parent_t = Alignment_impl_block_compressed_storage< my_type >;
 /*
+	//These are defined in the interface class StateVector<>
 	using block_index_t = uint16_t;
-	//using block_index_container_t = std::vector< block_index_t >;
 	using block_index_container_t = IndexVector< block_index_t >;
 	using frequencies_type = std::array< std::size_t, number_of_states<state_t>::value >;
 */

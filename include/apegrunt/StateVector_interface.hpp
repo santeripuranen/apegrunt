@@ -72,12 +72,11 @@ public:
 	using frequencies_type = std::array< std::size_t, number_of_states<state_t>::value >;
 	using weight_type = double;
 
+
 	using block_index_t = uint16_t; // this is sufficient only as long as we have at most 2^16 (=65536) blocks
 	using block_index_container_t = std::vector< block_index_t >;
-/*
-	using block_index_t = uint16_t;
-	using block_index_container_t = IndexVector< block_index_t >;
-*/
+	//using block_index_container_t = IndexVector< block_index_t >;
+
 	StateVector() = default;
     virtual ~StateVector() = default; // enable derived classes to be destructed through StateVector_ptr
 
