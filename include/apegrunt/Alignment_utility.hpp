@@ -37,6 +37,7 @@
 #include "StateVector_state_types.hpp"
 #include "StateVector_utility.hpp"
 #include "Alignment_factory.hpp"
+#include "Alignment_StateVector_weights.hpp"
 
 #include "Loci_parsers.hpp"
 #include "State_block.hpp"
@@ -49,6 +50,8 @@
 #include "accumulators/distribution_cumulative.hpp"
 //#include "accumulators/distribution_generator_svg.hpp"
 #include "accumulators/distribution_generator_csv.hpp"
+
+#include "misc/Stopwatch.hpp"
 
 namespace apegrunt {
 
@@ -69,6 +72,144 @@ RealT norm( const std::vector< std::size_t >& v )
 	using std::sqrt;
 	auto n2 = norm2(v);
 	return ( n2 != 0.0 ? sqrt( real_t(n2) ) : 0 );
+}
+
+template< typename StateT >
+std::vector< Alignment_ptr<StateT> > get_alignments( std::size_t max_alignments=-1 )
+{
+	using state_t = StateT;
+	using alignment_default_storage_t = apegrunt::Alignment_impl_block_compressed_storage< apegrunt::StateVector_impl_block_compressed_alignment_storage<state_t> >;
+
+	stopwatch::stopwatch cputimer( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
+
+	std::vector< Alignment_ptr<state_t> > alignments;
+
+	if( apegrunt::Apegrunt_options::has_alignment_filenames() )
+	{
+		if( apegrunt::Apegrunt_options::get_alignment_filenames().size() > max_alignments )
+		{
+			*Apegrunt_options::get_err_stream() << "apegrunt error: will not accept more than 2 alignments (got " << apegrunt::Apegrunt_options::get_alignment_filenames().size() << " filenames).\n\n";
+			return alignments;
+		}
+
+		if( Apegrunt_options::verbose() )
+		{
+			*Apegrunt_options::get_out_stream() << "apegrunt: get " << apegrunt::Apegrunt_options::get_alignment_filenames().size() << " alignment" << (apegrunt::Apegrunt_options::get_alignment_filenames().size() > 1 ? "s" : "") << ":\n\n";
+		}
+
+		for( auto& filename: apegrunt::Apegrunt_options::get_alignment_filenames() )
+		{
+			if( Apegrunt_options::verbose() )
+			{
+				*Apegrunt_options::get_out_stream() << "apegrunt: parse alignment from file \"" << filename << "\"\n";
+			}
+			cputimer.start();
+			auto alignment = apegrunt::parse_Alignment< alignment_default_storage_t >( filename );
+			cputimer.stop();
+			if( !alignment )
+			{
+				*Apegrunt_options::get_err_stream() << "apegrunt error: Could not get alignment from input file \"" << filename << "\"\n\n";
+			}
+			else
+			{
+				alignments.push_back( alignment ); // store the new alignment
+				if( Apegrunt_options::verbose() )
+				{
+					*Apegrunt_options::get_out_stream() << "apegrunt: got alignment \"" << alignment->id_string() << "\":\n";
+					alignment->statistics( Apegrunt_options::get_out_stream() );
+				}
+			}
+			cputimer.print_timing_stats(); *Apegrunt_options::get_out_stream() << "\n";
+		}
+	}
+	else
+	{
+		*Apegrunt_options::get_err_stream() << "apegrunt: no input files specified!\n\n";
+		exit(EXIT_FAILURE);
+	}
+	return alignments;
+}
+
+// deal with sample weights
+template< typename StateT, typename RealT=double >
+void cache_sample_weights( Alignment_ptr<StateT> alignment )
+{
+	using real_t = RealT;
+	using std::cbegin; using std::cend;
+
+	stopwatch::stopwatch cputimer( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
+
+	if( Apegrunt_options::reweight_samples() )
+	{
+		cputimer.start();
+
+		if( Apegrunt_options::has_sample_weights_filename() )
+		{
+			if( Apegrunt_options::verbose() )
+			{
+				*Apegrunt_options::get_out_stream() << "apegrunt: get sample weights from file \"" << Apegrunt_options::get_sample_weights_filename() << "\"\n";
+			}
+
+			auto weights = apegrunt::parse_ValueVector<real_t>( Apegrunt_options::get_sample_weights_filename() );
+			const auto n_size = alignment->size();
+			using apegrunt::cbegin; using apegrunt::cend;
+			const auto n_eff = std::accumulate( cbegin(weights), cend(weights), real_t(0) );
+
+			for( auto seq_and_weight: apegrunt::zip_range( alignment, weights ) )
+			{
+				using boost::get;
+				if( Apegrunt_options::rescale_sample_weights() )
+				{
+					// weights normalized and scaled to give neff == n_size
+					get<0>(seq_and_weight)->set_weight( real_t(get<1>(seq_and_weight)) * real_t(n_size)/real_t(n_eff) );
+				}
+				else
+				{
+					// unnormalized and unscaled weights, neff != n_size
+					get<0>(seq_and_weight)->set_weight( get<1>(seq_and_weight) );
+				}
+			}
+		}
+		else
+		{
+			if( Apegrunt_options::verbose() )
+			{
+				*Apegrunt_options::get_out_stream() << "apegrunt: calculate sequence weights" << std::endl;
+			}
+
+			auto weights = calculate_weights( alignment );
+			const auto n_size = alignment->size();
+			const auto n_eff = std::accumulate( cbegin(weights), cend(weights), real_t(0) );
+
+			for( auto seq_and_weight: zip_range( alignment, weights ) )
+			{
+				using boost::get;
+				if( Apegrunt_options::rescale_sample_weights() )
+				{
+					// weights scaled to give neff == n_size
+					get<0>(seq_and_weight)->set_weight( real_t(get<1>(seq_and_weight)) * real_t(n_size)/real_t(n_eff) );
+				}
+				else
+				{
+					// unscaled weights neff != n_size
+					get<0>(seq_and_weight)->set_weight( get<1>(seq_and_weight) );
+				}
+			}
+		}
+
+		cputimer.stop(); cputimer.print_timing_stats(); *Apegrunt_options::get_out_stream() << "\n";
+	}
+	// output weights
+	if( Apegrunt_options::output_sample_weights() )
+	{
+		// output weights
+		auto weights_file = get_unique_ofstream( alignment->id_string()+"."+apegrunt::size_string(alignment)+".weights" );
+		auto& weights_stream = *weights_file->stream();
+		weights_stream << std::scientific;
+		weights_stream.precision(8);
+		auto weights = apegrunt::get_weights( alignment );
+		for( auto w: weights ) { weights_stream << w << "\n"; }
+	}
 }
 
 template< typename StateT >
@@ -142,6 +283,156 @@ std::vector< std::array< RealT, number_of_states<StateT>::N > > weighted_columnw
 	return freq_vec;
 }
 
+template< typename StateT >
+void output_state_frequencies( const Alignment_ptr<StateT> alignment )
+{
+	stopwatch::stopwatch cputimer( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
+
+	if( Apegrunt_options::output_state_frequencies() )
+	{
+		{ // output un-weighted frequencies
+			cputimer.start();
+			auto frequencies_file = apegrunt::get_unique_ofstream( fsalignment->id_string()+"."+apegrunt::size_string(fsalignment)+".frequencies.txt" );
+			if( Apegrunt_options::verbose() )
+			{
+				*Apegrunt_options::get_out_stream() << "apegrunt: write columnwise state frequencies to file \"" << frequencies_file->name() << "\"\n";
+				Apegrunt_options::get_out_stream()->flush();
+			}
+			if( apegrunt::output_frequencies( fsalignment, frequencies_file->stream() ) )
+			{
+				cputimer.stop();
+				if( Apegrunt_options::verbose() )
+				{
+					cputimer.print_timing_stats();
+					*Apegrunt_options::get_out_stream() << "\n";
+				}
+			}
+			else
+			{
+				cputimer.stop();
+				if( Apegrunt_options::verbose() )
+				{
+					*Apegrunt_options::get_err_stream() << "apegrunt ERROR: unable to write file \"" << frequencies_file->name() << "\"\n" << std::endl;
+				}
+			}
+		}
+		{ // output un-weighted frequency distribution
+			cputimer.start();
+			auto distribution_file = apegrunt::get_unique_ofstream( fsalignment->id_string()+"."+apegrunt::size_string(fsalignment)+".frequency_distribution.txt" );
+			if( Apegrunt_options::verbose() )
+			{
+				*Apegrunt_options::get_out_stream() << "apegrunt: write columnwise state frequency distribution to file \"" << distribution_file->name() << "\"\n";
+				Apegrunt_options::get_out_stream()->flush();
+			}
+			if( apegrunt::output_frequency_distribution( fsalignment, distribution_file->stream() ) )
+			{
+				cputimer.stop();
+				if( Apegrunt_options::verbose() )
+				{
+					cputimer.print_timing_stats();
+					*Apegrunt_options::get_out_stream() << "\n";
+				}
+			}
+			else
+			{
+				cputimer.stop();
+				if( Apegrunt_options::verbose() )
+				{
+					*Apegrunt_options::get_err_stream() << "apegrunt ERROR: unable to write file \"" << distribution_file->name() << "\"\n" << std::endl;
+				}
+			}
+		}
+
+		if( apegrunt::Apegrunt_options::reweight_samples() )
+		{
+			{ // output weighted frequencies
+				cputimer.start();
+				auto frequencies_file = apegrunt::get_unique_ofstream( fsalignment->id_string()+"."+apegrunt::size_string(fsalignment)+".weighted_frequencies.txt" );
+				if( Apegrunt_options::verbose() )
+				{
+					*Apegrunt_options::get_out_stream() << "apegrunt: write weighted columnwise state frequencies to file \"" << frequencies_file->name() << "\"\n";
+				}
+				if( apegrunt::output_frequencies( fsalignment, frequencies_file->stream(), true ) ) // true == output weighted frequencies
+				{
+					cputimer.stop();
+					if( Apegrunt_options::verbose() )
+					{
+						cputimer.print_timing_stats();
+						*Apegrunt_options::get_out_stream() << "\n";
+					}
+				}
+				else
+				{
+					cputimer.stop();
+					if( plmDCA_options::verbose() )
+					{
+						*Apegrunt_options::get_err_stream() << "apegrunt ERROR: unable to write file \"" << frequencies_file->name() << "\"\n" << std::endl;
+					}
+				}
+			}
+			{ // output un-weighted frequency distribution
+				cputimer.start();
+				auto distribution_file = apegrunt::get_unique_ofstream( fsalignment->id_string()+"."+apegrunt::size_string(fsalignment)+".weighted_frequency_distribution.txt" );
+				if( Apegrunt_options::verbose() )
+				{
+					*Apegrunt_options::get_out_stream() << "apegrunt: write columnwise state frequency distribution to file \"" << distribution_file->name() << "\"\n";
+					Apegrunt_options::get_out_stream()->flush();
+				}
+				if( apegrunt::output_frequency_distribution( fsalignment, distribution_file->stream(), true ) ) // true == output weighted frequencies
+				{
+					cputimer.stop();
+					if( Apegrunt_options::verbose() )
+					{
+						cputimer.print_timing_stats();
+						*Apegrunt_options::get_out_stream() << "\n";
+					}
+				}
+				else
+				{
+					cputimer.stop();
+					if( Apegrunt_options::verbose() )
+					{
+						*Apegrunt_options::get_err_stream() << "apegrunt ERROR: unable to write file \"" << distribution_file->name() << "\"\n" << std::endl;
+					}
+				}
+			}
+		}
+	}
+}
+
+template< typename StateT >
+void output_sample_distance_matrix( const Alignment_ptr<StateT> alignment )
+{
+	stopwatch::stopwatch cputimer( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
+
+	if( Apegrunt_options::output_sample_distance_matrix() )
+	{
+		cputimer.start();
+		auto matrix_file = apegrunt::get_unique_ofstream( alignment->id_string()+"."+apegrunt::size_string(alignment)+".triangular_sample_distance_matrix" );
+
+		if( Apegrunt_options::verbose() )
+		{
+			*Apegrunt_options::get_out_stream() << "apegrunt: write sample-sample Hamming distance matrix to file \"" << matrix_file->name() << "\"\n";
+		}
+		if( apegrunt::output_sample_distance_matrix( alignment, matrix_file->stream() ) )
+		{
+			cputimer.stop();
+			if( Apegrunt_options::verbose() )
+			{
+				cputimer.print_timing_stats();
+				*Apegrunt_options::get_out_stream() << "\n";
+			}
+		}
+		else
+		{
+			cputimer.stop();
+			if( apegrunt_options::verbose() )
+			{
+				*Apegrunt_options::get_err_stream() << "apegrunt ERROR: unable to write file \"" << matrix_file->name() << "\"\n" << std::endl;
+			}
+		}
+	}
+}
 
 // To use, inherit from extend_comparison_operators and
 // define these public operators in your struct/class:
@@ -257,6 +548,44 @@ private:
 		template< typename T > T& operator()( const T& a ) { m_container.push_back(a.state)
 	};
 */
+
+	template< typename StateT >
+	std::array<std::size_t,number_of_states<StateT>::value+1> get_state_statistics( const Alignment_ptr<StateT> alignment ) const
+	{
+		using state_t = StateT;
+		std::array<std::size_t,number_of_states<state_t>::value+1> statef; for( auto& s: statef ) { s=0; }
+		const auto freq_vec = columnwise_frequencies( alignment );
+
+		for( const auto& freq: freq_vec ) // loop over all sequence positions
+		{
+			std::size_t totaln_nz = 0;
+
+			for( std::size_t i = 0; i < number_of_states<state_t>::value; ++i )
+			{
+				freq[i] > 0 && ++totaln_nz;
+			}
+
+			statef[totaln_nz] += 1;
+		}
+
+		return statef;
+	}
+
+	template< int N >
+	void print_state_statistics( std::array<std::size_t,N> state_statistics, std::ostream *out=nullptr )
+	{
+		std::size_t positions = 0;
+		std::size_t SNPs = 0;
+		*out << "\n";
+		for( std::size_t i=N; i != 0; --i )
+		{
+			*out << i << "-state positions = " << state_statistics[i] << std::endl;
+			positions += state_statistics[i];
+			i > 1 && SNPs += state_statistics[i];
+		}
+		*out << "SNPs / total positions: " << SNPs << " / " << positions << std::endl;
+	}
+
 	template< typename StateT >
 	Loci_ptr get_filter_list( const Alignment_ptr<StateT> alignment ) const
 	{
@@ -264,7 +593,7 @@ private:
 		using state_t = StateT;
 		using std::begin; using std::end; using std::cbegin; using std::cend;
 
-		std::array<std::size_t,number_of_states<state_t>::value> statef; for( auto& s: statef ) { s=0; }
+		std::array<std::size_t,number_of_states<state_t>::value+1> statef; for( auto& s: statef ) { s=0; }
 
 		std::vector<index_and_state_count_association> proto_accept_list;
 		std::vector<std::size_t> accept_list;
@@ -281,13 +610,14 @@ private:
 
 			std::size_t n_significant = 0;
 			std::size_t n_nz = 0;
+/*
 			std::size_t totaln_nz = 0;
 
 			for( std::size_t i = 0; i < number_of_states<state_t>::value; ++i )
 			{
 				freq[i] > 0 && ++totaln_nz;
 			}
-
+*/
 			//std::cout << "[";
 			for( std::size_t i = 0; i < n; ++i )
 			{
@@ -304,17 +634,11 @@ private:
 
 			n_nz > 1 && ++total_SNPs;
 
-			statef[totaln_nz] += 1;
+//			statef[totaln_nz] += 1;
 
 			++current_locus;
 		}
 
-		std::cout << "\n";
-		for( std::size_t i=number_of_states<state_t>::value; i != 0; --i )
-		{
-			std::cout << "number of " << i << "-state positions = " << statef[i] << std::endl;
-			//std::cout << "number of " << i+1 << "-state positions = " << statef[i] << std::endl;
-		}
 		//for( std::size_t i=0; i < statef.size(); ++i ) { std::cout << "apegrunt: " << i << " state = " << statef[i] << "\n"; }
 /*
 		accept_list.reserve(proto_accept_list.size());
