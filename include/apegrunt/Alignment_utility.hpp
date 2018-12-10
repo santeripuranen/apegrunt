@@ -284,6 +284,46 @@ std::vector< std::array< RealT, number_of_states<StateT>::N > > weighted_columnw
 }
 
 template< typename StateT >
+bool output_frequencies( const Alignment_ptr<StateT> alignment, std::ostream *os=nullptr, bool weighted=false )
+{
+	if( os && os->good() )
+	{
+		//os->precision(3); //os->width(8);
+		const auto freq_vec = weighted ? weighted_columnwise_frequencies( alignment ) : columnwise_frequencies( alignment );
+		for( const auto& freq: freq_vec ) // loop over all sequence positions
+		{
+			for( const auto& f: freq )
+			{
+				*os << f << " ";
+			}
+			*os << "\n";
+		}
+		return true;
+	}
+	return false;
+}
+
+template< typename StateT >
+bool output_frequency_distribution( const Alignment_ptr<StateT> alignment, std::ostream *os=nullptr, bool weighted=false )
+{
+	namespace acc = boost::accumulators;
+	using real_t = double;
+
+	if( os && os->good() )
+	{
+		acc::accumulator_set<real_t, acc::stats<acc::tag::std(acc::from_distribution),acc::tag::distribution_bincount> >
+		frequency_distribution( acc::tag::distribution::binwidth=0.01 );
+		//os->precision(3); //os->width(8);
+		const auto freq_vec = weighted ? weighted_columnwise_frequencies( alignment ) : columnwise_frequencies( alignment );
+		frequency_distribution << freq_vec;
+		*os << apegrunt::accumulators::csv(acc::distribution(frequency_distribution));
+		return true;
+	}
+	return false;
+}
+
+
+template< typename StateT >
 void output_state_frequencies( const Alignment_ptr<StateT> alignment )
 {
 	stopwatch::stopwatch cputimer( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
@@ -292,13 +332,13 @@ void output_state_frequencies( const Alignment_ptr<StateT> alignment )
 	{
 		{ // output un-weighted frequencies
 			cputimer.start();
-			auto frequencies_file = apegrunt::get_unique_ofstream( fsalignment->id_string()+"."+apegrunt::size_string(fsalignment)+".frequencies.txt" );
+			auto frequencies_file = apegrunt::get_unique_ofstream( alignment->id_string()+"."+apegrunt::size_string(alignment)+".frequencies.txt" );
 			if( Apegrunt_options::verbose() )
 			{
 				*Apegrunt_options::get_out_stream() << "apegrunt: write columnwise state frequencies to file \"" << frequencies_file->name() << "\"\n";
 				Apegrunt_options::get_out_stream()->flush();
 			}
-			if( apegrunt::output_frequencies( fsalignment, frequencies_file->stream() ) )
+			if( apegrunt::output_frequencies( alignment, frequencies_file->stream() ) )
 			{
 				cputimer.stop();
 				if( Apegrunt_options::verbose() )
@@ -318,13 +358,13 @@ void output_state_frequencies( const Alignment_ptr<StateT> alignment )
 		}
 		{ // output un-weighted frequency distribution
 			cputimer.start();
-			auto distribution_file = apegrunt::get_unique_ofstream( fsalignment->id_string()+"."+apegrunt::size_string(fsalignment)+".frequency_distribution.txt" );
+			auto distribution_file = apegrunt::get_unique_ofstream( alignment->id_string()+"."+apegrunt::size_string(alignment)+".frequency_distribution.txt" );
 			if( Apegrunt_options::verbose() )
 			{
 				*Apegrunt_options::get_out_stream() << "apegrunt: write columnwise state frequency distribution to file \"" << distribution_file->name() << "\"\n";
 				Apegrunt_options::get_out_stream()->flush();
 			}
-			if( apegrunt::output_frequency_distribution( fsalignment, distribution_file->stream() ) )
+			if( apegrunt::output_frequency_distribution( alignment, distribution_file->stream() ) )
 			{
 				cputimer.stop();
 				if( Apegrunt_options::verbose() )
@@ -347,12 +387,12 @@ void output_state_frequencies( const Alignment_ptr<StateT> alignment )
 		{
 			{ // output weighted frequencies
 				cputimer.start();
-				auto frequencies_file = apegrunt::get_unique_ofstream( fsalignment->id_string()+"."+apegrunt::size_string(fsalignment)+".weighted_frequencies.txt" );
+				auto frequencies_file = apegrunt::get_unique_ofstream( alignment->id_string()+"."+apegrunt::size_string(alignment)+".weighted_frequencies.txt" );
 				if( Apegrunt_options::verbose() )
 				{
 					*Apegrunt_options::get_out_stream() << "apegrunt: write weighted columnwise state frequencies to file \"" << frequencies_file->name() << "\"\n";
 				}
-				if( apegrunt::output_frequencies( fsalignment, frequencies_file->stream(), true ) ) // true == output weighted frequencies
+				if( apegrunt::output_frequencies( alignment, frequencies_file->stream(), true ) ) // true == output weighted frequencies
 				{
 					cputimer.stop();
 					if( Apegrunt_options::verbose() )
@@ -364,7 +404,7 @@ void output_state_frequencies( const Alignment_ptr<StateT> alignment )
 				else
 				{
 					cputimer.stop();
-					if( plmDCA_options::verbose() )
+					if( Apegrunt_options::verbose() )
 					{
 						*Apegrunt_options::get_err_stream() << "apegrunt ERROR: unable to write file \"" << frequencies_file->name() << "\"\n" << std::endl;
 					}
@@ -372,13 +412,13 @@ void output_state_frequencies( const Alignment_ptr<StateT> alignment )
 			}
 			{ // output un-weighted frequency distribution
 				cputimer.start();
-				auto distribution_file = apegrunt::get_unique_ofstream( fsalignment->id_string()+"."+apegrunt::size_string(fsalignment)+".weighted_frequency_distribution.txt" );
+				auto distribution_file = apegrunt::get_unique_ofstream( alignment->id_string()+"."+apegrunt::size_string(alignment)+".weighted_frequency_distribution.txt" );
 				if( Apegrunt_options::verbose() )
 				{
 					*Apegrunt_options::get_out_stream() << "apegrunt: write columnwise state frequency distribution to file \"" << distribution_file->name() << "\"\n";
 					Apegrunt_options::get_out_stream()->flush();
 				}
-				if( apegrunt::output_frequency_distribution( fsalignment, distribution_file->stream(), true ) ) // true == output weighted frequencies
+				if( apegrunt::output_frequency_distribution( alignment, distribution_file->stream(), true ) ) // true == output weighted frequencies
 				{
 					cputimer.stop();
 					if( Apegrunt_options::verbose() )
@@ -426,7 +466,7 @@ void output_sample_distance_matrix( const Alignment_ptr<StateT> alignment )
 		else
 		{
 			cputimer.stop();
-			if( apegrunt_options::verbose() )
+			if( Apegrunt_options::verbose() )
 			{
 				*Apegrunt_options::get_err_stream() << "apegrunt ERROR: unable to write file \"" << matrix_file->name() << "\"\n" << std::endl;
 			}
@@ -653,45 +693,6 @@ private:
 	}
 
 };
-
-template< typename StateT >
-bool output_frequencies( const Alignment_ptr<StateT> alignment, std::ostream *os=nullptr, bool weighted=false )
-{
-	if( os && os->good() )
-	{
-		//os->precision(3); //os->width(8);
-		const auto freq_vec = weighted ? weighted_columnwise_frequencies( alignment ) : columnwise_frequencies( alignment );
-		for( const auto& freq: freq_vec ) // loop over all sequence positions
-		{
-			for( const auto& f: freq )
-			{
-				*os << f << " ";
-			}
-			*os << "\n";
-		}
-		return true;
-	}
-	return false;
-}
-
-template< typename StateT >
-bool output_frequency_distribution( const Alignment_ptr<StateT> alignment, std::ostream *os=nullptr, bool weighted=false )
-{
-	namespace acc = boost::accumulators;
-	using real_t = double;
-
-	if( os && os->good() )
-	{
-		acc::accumulator_set<real_t, acc::stats<acc::tag::std(acc::from_distribution),acc::tag::distribution_bincount> >
-		frequency_distribution( acc::tag::distribution::binwidth=0.01 );
-		//os->precision(3); //os->width(8);
-		const auto freq_vec = weighted ? weighted_columnwise_frequencies( alignment ) : columnwise_frequencies( alignment );
-		frequency_distribution << freq_vec;
-		*os << apegrunt::accumulators::csv(acc::distribution(frequency_distribution));
-		return true;
-	}
-	return false;
-}
 
 template< typename StateT >
 bool output_sample_distance_matrix( const Alignment_ptr<StateT> alignment, std::ostream *os=nullptr )
