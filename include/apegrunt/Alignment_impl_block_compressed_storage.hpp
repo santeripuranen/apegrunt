@@ -50,6 +50,9 @@
 #include "accumulators/distribution_bincount.hpp"
 #include "accumulators/distribution_generator_csv.hpp"
 
+#include "Apegrunt_utility.hpp"
+#include "misc/Math.hpp"
+
 namespace apegrunt {
 
 template< typename T >
@@ -220,7 +223,7 @@ public:
 
     inline const std::type_info& type() const { return typeid(my_type); }
 
-    inline frequencies_ptr frequencies()
+    inline frequencies_ptr frequencies() const
     {
 		//std::cout << " {get frequencies"; std::cout.flush();
     	m_cache_frequencies_mutex.lock();
@@ -308,6 +311,25 @@ public:
 */
 		}
 
+		// Get state statistics
+		std::array<std::size_t,number_of_states<state_t>::value+1> state_stats; for( auto& s: state_stats ) { s=0; }
+		const auto column_frequencies = this->frequencies();
+
+		using std::begin; using std::end;
+		for( const auto& freq: *column_frequencies ) // loop over all sequence positions
+		{
+			std::size_t totaln_nz = 0;
+			for( std::size_t i = 0; i < number_of_states<state_t>::value; ++i )
+			{
+				freq[i] > 0 && ++totaln_nz;
+			}
+			state_stats[totaln_nz] += 1;
+		}
+
+		std::size_t SNPs = 0;
+		for( std::size_t i=2; i < state_stats.size(); ++i ) { SNPs += state_stats[i]; }
+		// end Get state statistics
+
 		const std::size_t n_gblocks = global_blocks.size();
 
 		std::sort( col_size.begin(), col_size.end() );
@@ -321,6 +343,13 @@ public:
 		const std::size_t gnucs_mem = n_gblocks*N*sizeof(state_t);
 
 		*out << "apegrunt: alignment has " << n_seqs << " sequences and " << n_loci << " loci (" << onucs << " nucleotides in total)\n";
+		*out << "apegrunt: alignment has " << SNPs << " SNPs in total\n";
+		*out << "apegrunt: state distribution:\n";
+		for( std::size_t i=state_stats.size()-1; i > 0; --i )
+		{
+			*out << "          " << i << "-state positions = " << state_stats[i] << "\n";
+		}
+
 //		*out << "apegrunt: stateblock compression uses " << n_block_column_groups << " column groups of " << N << "-nucleotide blocks (" << sizeof(block_type) << "B per block)\n";
 		*out << "apegrunt: uncompressed size = " << memory_string(onucs_mem) << "\n";
 // Compressed blocks -- block-wise lists
@@ -336,7 +365,7 @@ public:
 */
 	}
 
-	block_accounting_ptr get_block_accounting()
+	block_accounting_ptr get_block_accounting() const
 	{
 		m_cache_block_accounting_mutex.lock();
 		if( !m_block_accounting ) { this->cache_block_accounting(); }
@@ -368,21 +397,21 @@ private:
 
 	std::vector< StateVector_ptr<state_t> > m_rows;
 	block_storage_ptr m_block_storage;
-	block_accounting_ptr m_block_accounting;
+	mutable block_accounting_ptr m_block_accounting;
 	block_weights_ptr m_block_weights;
-	frequencies_ptr m_frequencies;
+	mutable frequencies_ptr m_frequencies;
 	w_frequencies_ptr m_w_frequencies;
 	distance_matrix_ptr m_distance_matrix;
 
-	std::mutex m_cache_block_accounting_mutex;
+	mutable std::mutex m_cache_block_accounting_mutex;
 	std::mutex m_cache_block_weights_mutex;
-	std::mutex m_cache_frequencies_mutex;
+	mutable std::mutex m_cache_frequencies_mutex;
 	std::mutex m_cache_w_frequencies_mutex;
 	std::mutex m_cache_distance_matrix_mutex;
 
 
 	// pull in all
-	void cache_block_accounting()
+	void cache_block_accounting() const
 	{
 		namespace acc = boost::accumulators;
 
@@ -425,6 +454,66 @@ private:
 				compr_mem += apegrunt::bytesize(index_container);
 			}
 		}
+/*
+		{ // block pair statistics -- beware: O(N^2) in number of block cols = very costly
+			std::size_t matching_pairs = 0;
+			std::size_t naive_pairs = 0;
+			const std::size_t total_col_pairs = ( apegrunt::ipow( m_block_storage->size(), 2 ) - m_block_storage->size() ) / 2;
+			std::size_t done_col_pairs = 0;
+
+			std::cout << "apegrunt: find column pair matches" << std::endl;
+			for( std::size_t col_i=0; col_i < m_block_storage->size(); ++col_i )
+			{
+				for( std::size_t col_j=0; col_j < col_i; ++col_j )
+				{
+					std::cout << "\r  processing.. " << double(done_col_pairs)/double(total_col_pairs)*100 << " % -- found " << matching_pairs << " / " << naive_pairs << " matching pairs (" << double(matching_pairs)/double(naive_pairs) << ")"; std::cout.flush();
+					naive_pairs += (*m_block_accounting)[col_i].size() * (*m_block_accounting)[col_j].size();
+					for( const auto& index_i_container: (*m_block_accounting)[col_i] )
+					{
+						for( const auto& index_j_container: (*m_block_accounting)[col_j] )
+						{
+							// reference implementation
+							//const auto match = std::find_first_of( std::cbegin(index_i_container), std::cend(index_i_container), std::cbegin(index_j_container), std::cend(index_j_container) );
+							//if( match != std::cend(index_i_container) ) { ++matching_pairs; }
+
+							if( index_j_container.front() > index_i_container.back() || index_j_container.back() < index_i_container.front() ) { continue; }
+
+							// our index lists are sorted, so a faster binary search is applicable
+							if( index_i_container.size() < index_j_container.size() )
+							{
+								for( const auto& index: index_j_container )
+								{
+									if( index > index_i_container.back() ) { break; }
+									if( index < index_i_container.front() ) { continue; }
+									if( std::binary_search( std::cbegin(index_i_container), std::cend(index_i_container), index ) )
+									{
+										++matching_pairs;
+										break;
+									}
+								}
+							}
+							else
+							{
+								for( const auto& index: index_i_container )
+								{
+									if( index > index_j_container.back() ) { break; }
+									if( index < index_j_container.front() ) { continue; }
+									if( std::binary_search( std::cbegin(index_j_container), std::cend(index_j_container), index ) )
+									{
+										++matching_pairs;
+										break;
+									}
+								}
+							}
+						}
+					}
+					++done_col_pairs;
+				}
+			}
+
+			std::cout << "\rapegrunt: found " << matching_pairs << " / " << naive_pairs << " matching pairs (" << double(matching_pairs)/double(naive_pairs)*100 << " %)" << std::endl;
+		}
+*/
 /*
 		auto distribution_file = apegrunt::get_unique_ofstream( "block_index_distribution.csv" );
 		*distribution_file->stream() << std::fixed;
@@ -504,7 +593,7 @@ private:
 */
 	}
 
-	void cache_column_frequencies()
+	void cache_column_frequencies() const
 	{
 		//std::cout << " {cache frequencies"; std::cout.flush();
 		m_frequencies = std::make_shared<frequencies_t>( this->n_loci() );
