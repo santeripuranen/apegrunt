@@ -53,6 +53,7 @@ std::vector<RealT> calculate_weights( apegrunt::Alignment_ptr<StateT> alignment 
 	if( Apegrunt_options::verbose() ) { *Apegrunt_options::get_out_stream() << "apegrunt: get sequence weights"; Apegrunt_options::get_out_stream()->flush(); }
 	cputimer.start();
 	std::size_t nonidentical_pairs = 0;
+	std::size_t sum = 0;
 	for( std::size_t i = 0; i < n_seqs; ++i )
 	{
 		const auto seq_i = ali[i]; // (*alignment)[i];
@@ -70,6 +71,7 @@ std::vector<RealT> calculate_weights( apegrunt::Alignment_ptr<StateT> alignment 
 				//int_weights[i] += (*alignment)[j]->multiplicity();
 				int_weights[i] += ali[j]->multiplicity();
 				int_weights[j] += seq_i_multiplicity;
+				sum += ( ali[j]->multiplicity() + seq_i_multiplicity );
 			}
 			else
 			{
@@ -92,6 +94,7 @@ std::vector<RealT> calculate_weights( apegrunt::Alignment_ptr<StateT> alignment 
 
 	using boost::get;
 	for( auto&& int_weights_and_seq : zip_range(int_weights,*alignment) ) { weights.push_back( get<1>(int_weights_and_seq)->multiplicity() / real_t( get<0>(int_weights_and_seq) ) ); } // 1/weight * multiplicity
+	//for( auto&& int_weights_and_seq : zip_range(int_weights,*alignment) ) { weights.push_back( ( ( get<1>(int_weights_and_seq)->multiplicity() / real_t( get<0>(int_weights_and_seq) ) ) / real_t(sum) ) * real_t(n_seqs) ); } // 1/weight * multiplicity
 
 	return weights;
 }
