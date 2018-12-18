@@ -46,6 +46,17 @@ template<>
 inline __m256d pow<2>( __m256d x ) { return x*x; }
 
 #endif // __AVX__
+
+template< typename RealT, uint Capacity, bool View >
+inline RealT sum( const Vector<RealT,Capacity,View>& v )
+{
+	RealT s = 0;
+	std::cout << "[";
+	for( std::size_t i=0; i < Capacity; ++i ) { s += v[i]; std::cout << " " << v[i];}
+	std::cout << " ] sum=" << s << "\n";
+	return s;
+}
+
 #endif // #ifndef NO_INTRINSICS
 
 } // namespace apegrunt
