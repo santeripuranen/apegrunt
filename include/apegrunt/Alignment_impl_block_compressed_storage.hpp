@@ -164,6 +164,19 @@ public:
 	using block_storage_t = typename base_type::block_storage_t;
 	using block_storage_ptr = typename base_type::block_storage_ptr;
 
+	using block_indices_t = typename base_type::block_indices_t;
+	using block_indices_ptr = typename base_type::block_indices_ptr;
+
+	using statecount_t = typename base_type::statecount_t;
+	using statecount_block_t = typename base_type::statecount_block_t;
+	using statecount_block_storage_t = typename base_type::statecount_block_storage_t;
+	using statecount_block_storage_ptr = typename base_type::statecount_block_storage_ptr;
+
+	using statepresence_t = typename base_type::statepresence_t;
+	using statepresence_block_t = typename base_type::statepresence_block_t;
+	using statepresence_block_storage_t = typename base_type::statepresence_block_storage_t;
+	using statepresence_block_storage_ptr = typename base_type::statepresence_block_storage_ptr;
+
 	Alignment_impl_block_compressed_storage() : m_rows(), m_block_storage( std::make_shared<block_storage_t>() ) { }
 
 	~Alignment_impl_block_compressed_storage() = default;
@@ -233,7 +246,7 @@ public:
     	return m_frequencies;
     }
 
-    inline w_frequencies_ptr w_frequencies()
+    inline w_frequencies_ptr w_frequencies() const
     {
 		//std::cout << " {get w_frequencies"; std::cout.flush();
     	m_cache_w_frequencies_mutex.lock();
@@ -243,7 +256,7 @@ public:
     	return m_w_frequencies;
     }
 
-    inline distance_matrix_ptr distance_matrix()
+    inline distance_matrix_ptr distance_matrix() const
     {
     	m_cache_distance_matrix_mutex.lock();
     	if( !m_distance_matrix ) { this->cache_distance_matrix(); }
@@ -252,6 +265,65 @@ public:
     }
 
     inline Alignment_subscript_proxy< StateVector_ptr<state_t> > subscript_proxy() const { return Alignment_subscript_proxy< StateVector_ptr<state_t> >( &m_rows ); }
+
+	block_accounting_ptr get_block_accounting() const
+	{
+		m_cache_block_accounting_mutex.lock();
+		if( !m_block_accounting ) { this->cache_block_accounting(); }
+		m_cache_block_accounting_mutex.unlock();
+		return m_block_accounting;
+	}
+
+	block_weights_ptr get_block_weights() const
+	{
+		m_cache_block_weights_mutex.lock();
+		if( !m_block_weights ) { this->cache_block_weights(); }
+		m_cache_block_weights_mutex.unlock();
+		return m_block_weights;
+	}
+
+	void get_column_block_distance_matrix() const
+	{
+		this->cache_column_block_distance();
+	}
+
+	block_storage_ptr get_block_storage() const
+	{
+		return m_block_storage;
+	}
+
+	statecount_block_storage_ptr get_statecount_blocks() const
+	{
+		//std::cout << "apegrunt: get_statecount_blocks()" << std::endl;
+		m_cache_statecount_and_statepresence_blocks_mutex.lock();
+		if( !m_statecount_blocks ) { this->cache_statecount_and_statepresence_blocks(); }
+		m_cache_statecount_and_statepresence_blocks_mutex.unlock();
+		//std::cout << "apegrunt: m_statecount_blocks->size()=" << m_statecount_blocks->size() << std::endl;
+		//std::cout << "apegrunt: return m_statecount_blocks" << std::endl;
+		return m_statecount_blocks;
+	}
+
+	statepresence_block_storage_ptr get_statepresence_blocks() const
+	{
+		//std::cout << "apegrunt: get_statepresence_blocks()" << std::endl;
+		m_cache_statecount_and_statepresence_blocks_mutex.lock();
+		if( !m_statepresence_blocks ) { this->cache_statecount_and_statepresence_blocks(); }
+		m_cache_statecount_and_statepresence_blocks_mutex.unlock();
+		//std::cout << "apegrunt: m_statepresence_blocks->size()=" << m_statepresence_blocks->size() << std::endl;
+		//std::cout << "apegrunt: return m_statepresence_blocks" << std::endl;
+		return m_statepresence_blocks;
+	}
+
+	block_indices_ptr get_block_indices() const
+    {
+    	auto indices_ptr = std::make_shared<block_indices_t>();
+    	auto& indices = *(indices_ptr.get());
+    	indices.reserve( m_block_storage->size() );
+
+    	for( std::size_t i=0; i < m_block_storage->size(); ++i ) { indices.push_back(i); }
+
+    	return indices_ptr;
+    }
 
 	void statistics( std::ostream *out=nullptr ) const
 	{
@@ -312,18 +384,13 @@ public:
 		}
 
 		// Get state statistics
-		std::array<std::size_t,number_of_states<state_t>::value+1> state_stats; for( auto& s: state_stats ) { s=0; }
-		const auto column_frequencies = this->frequencies();
-
 		using std::begin; using std::end;
-		for( const auto& freq: *column_frequencies ) // loop over all sequence positions
+		std::array<std::size_t,number_of_states<state_t>::value+1> state_stats; std::fill( begin(state_stats), end(state_stats), 0 );
+
+		for( const auto& block: *(this->get_statecount_blocks()) )
 		{
-			std::size_t totaln_nz = 0;
-			for( std::size_t i = 0; i < number_of_states<state_t>::value; ++i )
-			{
-				freq[i] > 0 && ++totaln_nz;
-			}
-			state_stats[totaln_nz] += 1;
+			//for( auto count: block ) { state_stats[ count ] += 1; }
+			for( std::size_t i=0; i < N; ++i ) { state_stats[ block[i] ] += 1; }
 		}
 
 		std::size_t SNPs = 0;
@@ -344,11 +411,15 @@ public:
 
 		*out << "apegrunt: alignment has " << n_seqs << " sequences and " << n_loci << " loci (" << onucs << " nucleotides in total)\n";
 		*out << "apegrunt: alignment has " << SNPs << " SNPs in total\n";
-		*out << "apegrunt: state distribution:\n";
-		for( std::size_t i=state_stats.size()-1; i > 0; --i )
+		*out << "apegrunt: state distribution [#states:#positions] =";
+		for( std::size_t i=1; i < state_stats.size(); ++i )
 		{
-			*out << "          " << i << "-state positions = " << state_stats[i] << "\n";
+			if( state_stats[i] != 0 )
+			{
+				*out << " " << i << ":" << state_stats[i];
+			}
 		}
+		*out << "\n";
 
 //		*out << "apegrunt: stateblock compression uses " << n_block_column_groups << " column groups of " << N << "-nucleotide blocks (" << sizeof(block_type) << "B per block)\n";
 		*out << "apegrunt: uncompressed size = " << memory_string(onucs_mem) << "\n";
@@ -365,57 +436,37 @@ public:
 */
 	}
 
-	block_accounting_ptr get_block_accounting() const
-	{
-		m_cache_block_accounting_mutex.lock();
-		if( !m_block_accounting ) { this->cache_block_accounting(); }
-		m_cache_block_accounting_mutex.unlock();
-		return m_block_accounting;
-	}
-
-	block_weights_ptr get_block_weights()
-    {
-		m_cache_block_weights_mutex.lock();
-		if( !m_block_weights ) { this->cache_block_weights(); }
-		m_cache_block_weights_mutex.unlock();
-		return m_block_weights;
-    }
-
-	void get_column_block_distance_matrix()
-	{
-		this->cache_column_block_distance();
-	}
-
-	block_storage_ptr get_block_storage() const
-	{
-		return m_block_storage;
-	}
-
 private:
 	using iterator_impl = apegrunt::iterator::Alignment_iterator_impl_block_compressed_storage< StateVector_ptr<state_t> >;
 	using const_iterator_impl = apegrunt::iterator::Alignment_const_iterator_impl_block_compressed_storage< StateVector_ptr<state_t> >;
 
+	// The data row proxies and the actual data matrix should in general not
+	// be modified during the lifetime of a const Alignment..
 	std::vector< StateVector_ptr<state_t> > m_rows;
 	block_storage_ptr m_block_storage;
+
+	// ..but all caches may be modified and are therefore declared mutable
 	mutable block_accounting_ptr m_block_accounting;
-	block_weights_ptr m_block_weights;
+	mutable block_weights_ptr m_block_weights;
 	mutable frequencies_ptr m_frequencies;
-	w_frequencies_ptr m_w_frequencies;
-	distance_matrix_ptr m_distance_matrix;
+	mutable w_frequencies_ptr m_w_frequencies;
+	mutable distance_matrix_ptr m_distance_matrix;
+	mutable statecount_block_storage_ptr m_statecount_blocks;
+	mutable statecount_block_storage_ptr m_statepresence_blocks;
 
 	mutable std::mutex m_cache_block_accounting_mutex;
-	std::mutex m_cache_block_weights_mutex;
+	mutable std::mutex m_cache_block_weights_mutex;
 	mutable std::mutex m_cache_frequencies_mutex;
-	std::mutex m_cache_w_frequencies_mutex;
-	std::mutex m_cache_distance_matrix_mutex;
-
+	mutable std::mutex m_cache_w_frequencies_mutex;
+	mutable std::mutex m_cache_distance_matrix_mutex;
+	mutable std::mutex m_cache_statecount_and_statepresence_blocks_mutex;
 
 	// pull in all
 	void cache_block_accounting() const
 	{
 		namespace acc = boost::accumulators;
 
-		//std::cout << " {cache block accounting"; std::cout.flush();
+		//std::cout << "apegrunt: cache block accounting\n"; std::cout.flush();
 		//using boost::get;
 		using std::cbegin;
 		using std::cend;
@@ -551,7 +602,7 @@ private:
 	}
 
 
-	void cache_block_weights()
+	void cache_block_weights() const
 	{
 /*
 		const auto& block_accounting = *(this->get_block_accounting());
@@ -595,7 +646,6 @@ private:
 
 	void cache_column_frequencies() const
 	{
-		//std::cout << " {cache frequencies"; std::cout.flush();
 		m_frequencies = std::make_shared<frequencies_t>( this->n_loci() );
 
 	    const std::size_t n_loci = this->n_loci(); // number of columns in the alignment
@@ -603,10 +653,7 @@ private:
 	    const std::size_t last_block_size = get_last_block_size(n_loci);
 	    const std::size_t last_block = get_last_block_index(n_loci);
 
-	    //std::cout << " {get block accounting"; std::cout.flush();
 	    const auto& block_accounting = *(this->get_block_accounting());
-		//std::cout << "}"; std::cout.flush();
-
 		const auto& blocks = *(this->get_block_storage());
 
 		auto& frequencies = *m_frequencies;
@@ -627,9 +674,8 @@ private:
 		//std::cout << "}"; std::cout.flush();
 	}
 
-	void cache_column_w_frequencies()
+	void cache_column_w_frequencies() const
 	{
-		//std::cout << " {cache w_frequencies"; std::cout.flush();
 		m_w_frequencies = std::make_shared<w_frequencies_t>( this->n_loci() );
 
 	    const std::size_t n_loci = this->n_loci(); // number of columns in the alignment
@@ -641,7 +687,6 @@ private:
 		const auto& blocks = *(this->get_block_storage());
 
 		std::vector<typename StateVector<state_t>::weight_type > weights; weights.reserve(this->size());
-
 		for( const auto& sequence: m_rows ) { weights.push_back(sequence->weight()); }
 
 		auto& frequencies = *m_w_frequencies;
@@ -684,7 +729,7 @@ private:
 */
 // /*
 	// the triangular sample-sample Hamming distance matrix
-	void cache_distance_matrix()
+	void cache_distance_matrix() const
 	{
 		const std::size_t n_seqs = this->size();
 		m_distance_matrix = std::make_shared<distance_matrix_t>( n_seqs*(n_seqs-1)/2, 0 );
@@ -724,8 +769,42 @@ private:
 		}
 	}
 
+	void cache_statecount_and_statepresence_blocks() const
+	{
+		//std::cout << "apegrunt: cache statecount and statepresence accounting" << std::endl;
+		const auto& blocks = *(this->get_block_storage());
+
+		m_statecount_blocks = std::make_shared< statecount_block_storage_t >(); m_statecount_blocks->reserve( blocks.size() );
+		auto& statecount_blocks = *m_statecount_blocks;
+
+		m_statepresence_blocks = std::make_shared< statepresence_block_storage_t >(); m_statepresence_blocks->reserve( blocks.size() );
+		auto& statepresence_blocks = *m_statepresence_blocks;
+
+		// some temp definitions
+		statecount_block_t ones( statecount_t(1) );
+
+		// create statepresence masks
+		for( const auto& block_column: blocks )
+		{
+			statecount_block_t statepresence_mask( statecount_t(0) );
+			//std::cout << " at onset: \"" << statepresence_mask << "\"" << std::endl;
+			for( const auto block: block_column )
+			{
+				statepresence_mask = statepresence_mask | ( ones << block );
+			}
+			statepresence_blocks.push_back( statepresence_mask );
+			statecount_blocks.push_back( apegrunt::popcnt_per_element(statepresence_mask) );
+			//std::cout << " at end:   \"" << statecount_blocks.back() << "\"" << std::endl;
+		}
+
+		// zero out padding elements of the last column block
+		for( std::size_t i = this->n_loci() % N; i < N; ++i ) { statepresence_blocks.back()[i] = 0; statecount_blocks.back()[i] = 0; }
+		//std::cout << "m_statecount_blocks->size()=" << m_statecount_blocks->size() << " m_statepresence_blocks->size()=" << m_statepresence_blocks->size() << std::endl;
+	}
+
 // */
-	void cache_column_block_distance()
+	// development code
+	void cache_column_block_distance() const
 	{
 		std::vector< bool > ident; ident.resize( this->size() );
 		std::vector< block_type > refblocks; refblocks.resize( this->size() );

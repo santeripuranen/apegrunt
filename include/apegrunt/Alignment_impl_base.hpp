@@ -67,6 +67,19 @@ public:
 	using block_storage_t = typename Alignment<state_t>::block_storage_t;
 	using block_storage_ptr = typename Alignment<state_t>::block_storage_ptr;
 
+	using block_indices_t = typename Alignment<state_t>::block_indices_t;
+	using block_indices_ptr = typename Alignment<state_t>::block_indices_ptr;
+
+	using statecount_t = typename Alignment<state_t>::statecount_t;
+	using statecount_block_t = typename Alignment<state_t>::statecount_block_t;
+	using statecount_block_storage_t = typename Alignment<state_t>::statecount_block_storage_t;
+	using statecount_block_storage_ptr = typename Alignment<state_t>::statecount_block_storage_ptr;
+
+	using statepresence_t = typename Alignment<state_t>::statepresence_t;
+	using statepresence_block_t = typename Alignment<state_t>::statepresence_block_t;
+	using statepresence_block_storage_t = typename Alignment<state_t>::statepresence_block_storage_t;
+	using statepresence_block_storage_ptr = typename Alignment<state_t>::statepresence_block_storage_ptr;
+
 	Alignment_impl_base() { }
 	~Alignment_impl_base() override { }
 
@@ -133,8 +146,11 @@ public:
     	return block_weights_ptr();
     }
 
-    block_accounting_ptr get_block_accounting() { return block_accounting_ptr(); } // default implementation returns empty shared_ptr
-    block_storage_ptr get_block_storage() { return block_storage_ptr(); } // default implementation returns empty shared_ptr
+    inline block_accounting_ptr get_block_accounting() { return block_accounting_ptr(); } // default implementation returns empty shared_ptr
+    inline block_storage_ptr get_block_storage() { return block_storage_ptr(); } // default implementation returns empty shared_ptr
+    inline block_indices_ptr get_block_indices() { return block_indices_ptr(); } // default implementation returns empty shared_ptr
+    inline statecount_block_storage_ptr get_statecount_blocks() { return statecount_block_storage_ptr(); } // default implementation returns empty shared_ptr
+    inline statepresence_block_storage_ptr get_statepresence_blocks() { return statepresence_block_storage_ptr(); } // default implementation returns empty shared_ptr
 
 private:
 	using derived_type = AlignmentT;
@@ -165,10 +181,10 @@ private:
     std::size_t n_loci_impl() const override { return static_cast<const_cast_t>(this)->n_loci(); }
     //std::size_t get_index_of_impl( const StateVector_ptr& query ) const override { return static_cast<const_cast_t>(this)->get_index_of(query); }
 
-    frequencies_ptr frequencies_impl() override { return static_cast<cast_t>(this)->frequencies(); }
-    w_frequencies_ptr w_frequencies_impl() override { return static_cast<cast_t>(this)->w_frequencies(); }
+    frequencies_ptr frequencies_impl() const override { return static_cast<const_cast_t>(this)->frequencies(); }
+    w_frequencies_ptr w_frequencies_impl() const override { return static_cast<const_cast_t>(this)->w_frequencies(); }
 
-    distance_matrix_ptr distance_matrix_impl() override { return static_cast<cast_t>(this)->distance_matrix(); }
+    distance_matrix_ptr distance_matrix_impl() const override { return static_cast<const_cast_t>(this)->distance_matrix(); }
 
     const std::type_info& type_impl() const override { return static_cast<const_cast_t>(this)->type(); }
 
@@ -179,11 +195,16 @@ private:
 
     Alignment_subscript_proxy< StateVector_ptr<state_t> > subscript_proxy_impl() const override { return static_cast<const_ref_cast_t>(*this).subscript_proxy(); }
 
-    void statistics_impl( std::ostream *out ) const override { return static_cast<const_ref_cast_t>(*this).statistics( out ); }
+    void statistics_impl( std::ostream *out ) const override { static_cast<const_cast_t>(this)->statistics( out ); }
 
-    block_accounting_ptr get_block_accounting_impl() override { return static_cast<cast_t>(this)->get_block_accounting(); }
-    block_storage_ptr get_block_storage_impl() const override { return static_cast<const_ref_cast_t>(*this).get_block_storage(); }
-    block_weights_ptr get_block_weights_impl() override { return static_cast<cast_t>(this)->get_block_weights(); }
+    block_accounting_ptr get_block_accounting_impl() const override { return static_cast<const_cast_t>(this)->get_block_accounting(); }
+    block_storage_ptr get_block_storage_impl() const override { return static_cast<const_cast_t>(this)->get_block_storage(); }
+    block_weights_ptr get_block_weights_impl() const override { return static_cast<const_cast_t>(this)->get_block_weights(); }
+
+    block_indices_ptr get_block_indices_impl() const override { return static_cast<const_cast_t>(this)->get_block_indices(); }
+
+    statecount_block_storage_ptr get_statecount_blocks_impl() const override { return static_cast<const_cast_t>(this)->get_statecount_blocks(); }
+    statepresence_block_storage_ptr get_statepresence_blocks_impl() const override { return static_cast<const_cast_t>(this)->get_statepresence_blocks(); }
 
     iterator erase_impl( iterator first, iterator last ) { return static_cast<cast_t>(this)->erase(first,last); }
 

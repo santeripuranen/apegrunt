@@ -36,6 +36,8 @@
 #include "Loci_forward.h"
 #include "State_block.hpp"
 
+#include "misc/Vector.h"
+
 #include "aligned_allocator.hpp"
 
 namespace apegrunt {
@@ -86,6 +88,9 @@ public:
 	using block_accounting_t = std::vector< std::vector< std::vector<block_index_t> > >;
 	using block_accounting_ptr = std::shared_ptr< block_accounting_t >;
 
+	using block_indices_t = std::vector< std::size_t >;
+	using block_indices_ptr = std::shared_ptr< block_indices_t >;
+
 	using block_type = State_block< State_holder<state_t>, apegrunt::StateBlock_size >;
 //	using compressed_block_type = Compressed_state_block< State_holder<state_t>, apegrunt::StateBlock_size >;
 
@@ -93,7 +98,17 @@ public:
 	using block_storage_t = std::vector< std::vector< block_type, allocator_t > >;
 	using block_storage_ptr = std::shared_ptr< block_storage_t >;
 
-    Alignment() { }
+	using statecount_t = uint8_t;
+	using statecount_block_t = apegrunt::Vector< statecount_t, apegrunt::StateBlock_size >; //std::array< statecount_t, apegrunt::StateBlock_size >;
+	using statecount_block_storage_t = std::vector< statecount_block_t >;
+	using statecount_block_storage_ptr = std::shared_ptr< statecount_block_storage_t >;
+
+	using statepresence_t = uint8_t;
+	using statepresence_block_t = apegrunt::Vector< statepresence_t, apegrunt::StateBlock_size >; //std::array< statepresence_t, apegrunt::StateBlock_size >;
+	using statepresence_block_storage_t = std::vector< statepresence_block_t >;
+	using statepresence_block_storage_ptr = std::shared_ptr< statepresence_block_storage_t >;
+
+	Alignment() { }
     virtual ~Alignment() { } // enable derived classes to be destructed through Alignment_ptr
 
     Alignment_ptr<state_t> clone() const { return this->clone_impl(); } // clone the object, leaving the callee valid and unmodified.
@@ -118,10 +133,10 @@ public:
     //> Return the number of (least common denominator) columns in the contained alignment
     inline std::size_t n_loci() const { return this->n_loci_impl(); }
 
-    inline frequencies_ptr frequencies() { return this->frequencies_impl(); }
-    inline w_frequencies_ptr w_frequencies() { return this->w_frequencies_impl(); }
+    inline frequencies_ptr frequencies() const { return this->frequencies_impl(); }
+    inline w_frequencies_ptr w_frequencies() const { return this->w_frequencies_impl(); }
 
-    inline distance_matrix_ptr distance_matrix() { return this->distance_matrix_impl(); }
+    inline distance_matrix_ptr distance_matrix() const { return this->distance_matrix_impl(); }
 
     inline const std::type_info& type() const { return this->type_impl(); }
 
@@ -134,10 +149,14 @@ public:
 
 	inline void statistics( std::ostream* out=nullptr ) const { this->statistics_impl( out ); }
 
-	inline block_accounting_ptr get_block_accounting() { return this->get_block_accounting_impl(); }
+	inline block_accounting_ptr get_block_accounting() const { return this->get_block_accounting_impl(); }
 	inline block_storage_ptr get_block_storage() const { return this->get_block_storage_impl(); }
-	inline block_weights_ptr get_block_weights() { return this->get_block_weights_impl(); }
+	inline block_weights_ptr get_block_weights() const { return this->get_block_weights_impl(); }
 
+	inline block_indices_ptr get_block_indices() const { return this->get_block_indices_impl(); }
+
+	inline statecount_block_storage_ptr get_statecount_blocks() { return this->get_statecount_blocks_impl(); }
+	inline statepresence_block_storage_ptr get_statepresence_blocks() { return this->get_statepresence_blocks_impl(); }
 private:
 
     virtual Alignment_ptr<state_t> clone_impl() const = 0;
@@ -158,10 +177,10 @@ private:
 
     virtual std::size_t n_loci_impl() const = 0;
 
-    virtual frequencies_ptr frequencies_impl() = 0;
-    virtual w_frequencies_ptr w_frequencies_impl() = 0;
+    virtual frequencies_ptr frequencies_impl() const = 0;
+    virtual w_frequencies_ptr w_frequencies_impl() const = 0;
 
-    virtual distance_matrix_ptr distance_matrix_impl() = 0;
+    virtual distance_matrix_ptr distance_matrix_impl() const = 0;
 
     virtual const std::type_info& type_impl() const = 0;
 
@@ -174,9 +193,14 @@ private:
 
     virtual void statistics_impl( std::ostream *out ) const = 0;
 
-    virtual block_accounting_ptr get_block_accounting_impl() = 0;
+    virtual block_accounting_ptr get_block_accounting_impl() const = 0;
     virtual block_storage_ptr get_block_storage_impl() const = 0;
-    virtual block_weights_ptr get_block_weights_impl() = 0;
+    virtual block_weights_ptr get_block_weights_impl() const = 0;
+
+    virtual block_indices_ptr get_block_indices_impl() const = 0;
+
+	virtual statecount_block_storage_ptr get_statecount_blocks_impl() const = 0;
+	virtual statepresence_block_storage_ptr get_statepresence_blocks_impl() const = 0;
 };
 
 template< typename StateT > typename Alignment<StateT>::const_iterator begin( const Alignment<StateT>& alignment ) { return alignment.cbegin(); }
