@@ -101,6 +101,10 @@ struct Edge : public apegrunt::extend_comparison_operators
 	id_t m_id;
 	real_t m_w;
 
+	inline id_t id() const { return m_id; }
+	inline typename id_t::node_id_t node1() const { return m_id.first(); }
+	inline typename id_t::node_id_t node2() const { return m_id.second(); }
+	inline constexpr real_t weight() const { return m_w; }
 	inline constexpr operator bool() const { return bool(m_id); }
 	inline constexpr void set() { m_id.set(); }
 	inline constexpr void unset() { m_id.unset(); }
