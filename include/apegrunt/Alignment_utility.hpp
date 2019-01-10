@@ -441,6 +441,31 @@ void output_state_frequencies( const Alignment_ptr<StateT> alignment )
 }
 
 template< typename StateT >
+bool output_sample_distance_matrix_impl( const Alignment_ptr<StateT> alignment, std::ostream *os=nullptr )
+{
+	if( os && os->good() )
+	{
+		auto distance_matrix_ptr = alignment->distance_matrix();
+		const auto& distance_matrix = *(distance_matrix_ptr.get());
+		const auto n_samples = alignment->size();
+
+		*os << "n=" << n_samples;
+		for( std::size_t i = 0; i < n_samples; ++i )
+		{
+			//const auto sample_i = distance_matrix[i];
+			for( std::size_t j = 0; j < i; ++j )
+			{
+				*os << distance_matrix[i*(i-1)/2+j] << " ";
+			}
+			*os << "\n";
+		}
+
+		return true;
+	}
+	return false;
+}
+
+template< typename StateT >
 void output_sample_distance_matrix( const Alignment_ptr<StateT> alignment )
 {
 	stopwatch::stopwatch cputimer( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
@@ -454,7 +479,7 @@ void output_sample_distance_matrix( const Alignment_ptr<StateT> alignment )
 		{
 			*Apegrunt_options::get_out_stream() << "apegrunt: write sample-sample Hamming distance matrix to file \"" << matrix_file->name() << "\"\n";
 		}
-		if( apegrunt::output_sample_distance_matrix( alignment, matrix_file->stream() ) )
+		if( apegrunt::output_sample_distance_matrix_impl( alignment, matrix_file->stream() ) )
 		{
 			cputimer.stop();
 			if( Apegrunt_options::verbose() )
@@ -473,25 +498,6 @@ void output_sample_distance_matrix( const Alignment_ptr<StateT> alignment )
 		}
 	}
 }
-
-// To use, inherit from extend_comparison_operators and
-// define these public operators in your struct/class:
-// inline bool T::operator==( const T& rhs ) const
-// inline bool operator<( const my_type& rhs ) const
-struct extend_comparison_operators { using enable_extended_comparison_operators = std::true_type; };
-
-template< typename T, typename std::enable_if< std::is_same< typename T::enable_extended_comparison_operators,std::true_type >::type >::type >
-inline bool operator!=( const T& lhs, const T& rhs ) { return !(lhs == rhs); }
-
-template< typename T, typename std::enable_if< std::is_same< typename T::enable_extended_comparison_operators,std::true_type >::type >::type >
-inline bool operator> ( const T& lhs, const T& rhs ) { return (rhs < lhs); }
-
-template< typename T, typename std::enable_if< std::is_same< typename T::enable_extended_comparison_operators,std::true_type >::type >::type >
-inline bool operator<=( const T& lhs, const T& rhs ) { return !(lhs > rhs); }
-
-template< typename T, typename std::enable_if< std::is_same< typename T::enable_extended_comparison_operators,std::true_type >::type >::type >
-inline bool operator>=( const T& lhs, const T& rhs ) { return !(lhs < rhs); }
-
 
 class Alignment_filter
 {
@@ -530,6 +536,7 @@ public:
 	template< typename FilteredAlignmentT >
 	Alignment_ptr< typename FilteredAlignmentT::state_t > operator()( const Alignment_ptr< typename FilteredAlignmentT::state_t > alignment ) const
 	{
+		using state_t = typename FilteredAlignmentT::state_t;
 		if( Apegrunt_options::filter_alignment() )
 		{
 			//std::cout << "apegrunt: get filter list"; std::cout.flush();
@@ -540,7 +547,7 @@ public:
 			id_stream << "filtered";
 			id_stream << "_ge" << std::setw(3) << std::setfill('0') << std::size_t(m_maf_threshold*100.) << "maf";
 			id_stream << "_le" << std::setw(3) << std::setfill('0') << std::size_t(m_gap_threshold*100.) << "gf";
-			id_stream << "_" << m_state_rule.safe_string() << "-lt04states";
+			id_stream << "_" << m_state_rule.safe_string() << "-lt0" << apegrunt::number_of_states<state_t>::value << "states";
 			//id_stream << "_L" << accept_list->size() << "n" << alignment->size();
 
 			accept_list->set_id_string( id_stream.str() );
@@ -666,7 +673,7 @@ private:
 			}
 			//std::cout << " ]\n";
 
-			if( m_state_rule(n_significant) && n_nz < 4 && (freq[std::size_t( gap_state<state_t>::value )] <= m_gap_threshold) ) // && n_nz == n_significant )
+			if( m_state_rule(n_significant) && n_nz < apegrunt::number_of_states<state_t>::value && (freq[std::size_t( gap_state<state_t>::value )] <= m_gap_threshold) ) // && n_nz == n_significant )
 			{
 				accept_list.push_back(current_locus);
 				//proto_accept_list.emplace_back(n_nz,current_locus);
@@ -694,30 +701,6 @@ private:
 
 };
 
-template< typename StateT >
-bool output_sample_distance_matrix( const Alignment_ptr<StateT> alignment, std::ostream *os=nullptr )
-{
-	if( os && os->good() )
-	{
-		auto distance_matrix_ptr = alignment->distance_matrix();
-		const auto& distance_matrix = *(distance_matrix_ptr.get());
-		const auto n_samples = alignment->size();
-
-		*os << "n=" << n_samples;
-		for( std::size_t i = 0; i < n_samples; ++i )
-		{
-			//const auto sample_i = distance_matrix[i];
-			for( std::size_t j = 0; j < i; ++j )
-			{
-				*os << distance_matrix[i*(i-1)/2+j] << " ";
-			}
-			*os << "\n";
-		}
-
-		return true;
-	}
-	return false;
-}
 
 template< typename AlignmentT, typename RealT >
 Alignment_ptr< typename AlignmentT::state_t >
@@ -754,7 +737,7 @@ sequence_sample(
 namespace detail
 {
 template< typename StateT, typename RealT >
-struct state_frequency_pair
+struct state_frequency_pair : public extend_comparison_operators
 {
 	using state_t = StateT;
 	using real_t = RealT;
@@ -773,7 +756,7 @@ struct state_frequency_pair
 	bool operator==( const my_type& rhs ) const { return freq == rhs.freq; }
 	bool operator<( const my_type& rhs ) const { return freq < rhs.freq; }
 };
-
+/*
 template< typename StateT, typename RealT >
 inline bool operator!=( const state_frequency_pair<StateT,RealT>& lhs, const state_frequency_pair<StateT,RealT>& rhs ) { return !(lhs == rhs); }
 template< typename StateT, typename RealT >
@@ -782,7 +765,7 @@ template< typename StateT, typename RealT >
 inline bool operator<=( const state_frequency_pair<StateT,RealT>& lhs, const state_frequency_pair<StateT,RealT>& rhs ) { return !(lhs > rhs); }
 template< typename StateT, typename RealT >
 inline bool operator>=( const state_frequency_pair<StateT,RealT>& lhs, const state_frequency_pair<StateT,RealT>& rhs ) { return !(lhs < rhs); }
-
+*/
 } // namespace detail
 
 template< typename StateT >
