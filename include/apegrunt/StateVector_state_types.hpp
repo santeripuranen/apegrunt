@@ -259,16 +259,13 @@ enum struct tetraallelic_state_t : uint8_t
 	f3=3 // 4th most frequent allele
 };
 
-//template<>
-//struct gap_state<tetraallelic_state_t> { static constexpr tetraallelic_state_t value = tetraallelic_state_t::GAP; };
-
 template<> struct number_of_states<tetraallelic_state_t> { enum { N=4, value=4 }; };
 
 template<>
-constexpr tetraallelic_state_t char_to_state<tetraallelic_state_t>( char nucleotide )
+constexpr tetraallelic_state_t char_to_state<tetraallelic_state_t>( char symbol )
 {
 	using state_t = tetraallelic_state_t;
-	switch( std::tolower(nucleotide) )
+	switch( std::tolower(symbol) )
 	{
 		case '0' : return state_t::f0; break;
 		case '1' : return state_t::f1; break;
@@ -278,9 +275,9 @@ constexpr tetraallelic_state_t char_to_state<tetraallelic_state_t>( char nucleot
 }
 
 template<>
-constexpr tetraallelic_state_t to_state<char,tetraallelic_state_t>( char nucleotide )
+constexpr tetraallelic_state_t to_state<char,tetraallelic_state_t>( char symbol )
 {
-	return char_to_state<tetraallelic_state_t>(nucleotide);
+	return char_to_state<tetraallelic_state_t>(symbol);
 }
 
 template< >
@@ -309,6 +306,68 @@ constexpr char to_char<tetraallelic_state_t>( tetraallelic_state_t state )
 {
 	return state_to_char<tetraallelic_state_t>(state);
 }
+
+// Penta-allelic states type
+
+enum struct pentaallelic_state_t : uint8_t
+{
+	f0=0, // most frequent allele
+	f1=1, // 2nd most frequent allele
+	f2=2, // 3rd most frequent allele
+	f3=3, // 4th most frequent allele
+	f4=4 // 5th most frequent allele
+};
+
+template<> struct number_of_states<pentaallelic_state_t> { enum { N=5, value=5 }; };
+
+template<>
+constexpr pentaallelic_state_t char_to_state<pentaallelic_state_t>( char symbol )
+{
+	using state_t = pentaallelic_state_t;
+	switch( std::tolower(symbol) )
+	{
+		case '0' : return state_t::f0; break;
+		case '1' : return state_t::f1; break;
+		case '2' : return state_t::f2; break;
+		case '3' : return state_t::f3; break;
+		case '4' : return state_t::f4; break;
+	}
+}
+
+template<>
+constexpr pentaallelic_state_t to_state<char,pentaallelic_state_t>( char symbol )
+{
+	return char_to_state<pentaallelic_state_t>(symbol);
+}
+
+template< >
+struct state_array<pentaallelic_state_t>
+{
+	using state_t = pentaallelic_state_t;
+	std::array< state_t, number_of_states<state_t>::value > states{{ state_t::f0, state_t::f1, state_t::f2, state_t::f3, state_t::f4 }};
+};
+
+template<>
+constexpr char state_to_char<pentaallelic_state_t>( pentaallelic_state_t state )
+{
+	using state_t = pentaallelic_state_t;
+	switch( state )
+	{
+		case state_t::f0 : return '0'; break;
+		case state_t::f1 : return '1'; break;
+		case state_t::f2 : return '2'; break;
+		case state_t::f3 : return '3'; break;
+		case state_t::f4 : return '4'; break;
+		default : return '-';
+	}
+}
+
+template<>
+constexpr char to_char<pentaallelic_state_t>( pentaallelic_state_t state )
+{
+	return state_to_char<pentaallelic_state_t>(state);
+}
+
 
 /*
 // Amino acid states
@@ -405,6 +464,9 @@ constexpr char to_char<char>( char state ) { return state; }
 template<>
 struct gap_state<char> { static constexpr char value = '-'; };
 
+template<>
+struct gap_state<unsigned char> { static constexpr unsigned char value = '-'; };
+
 // a wrapper/holder for the raw state type
 template< typename StateT >
 struct State_holder
@@ -482,6 +544,9 @@ struct gap_state< State_holder<StateT> > { static constexpr StateT value = State
 
 template<> template<>
 struct gap_state< State_holder<char> > { static constexpr char value = gap_state<char>::value; };
+
+template<> template<>
+struct gap_state< State_holder<unsigned char> > { static constexpr unsigned char value = gap_state<unsigned char>::value; };
 
 } // namespace apegrunt
 
