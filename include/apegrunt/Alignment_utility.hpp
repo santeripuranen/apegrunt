@@ -1001,8 +1001,6 @@ Alignment_ptr<StateT> transpose_alignment( const Alignment_ptr<StateT> alignment
 	return Alignment_factory< Alignment_impl_block_compressed_storage< StateVector_impl_block_compressed_alignment_storage<StateT> > >().transpose( alignment );
 }
 
-
-
 } // namespace apegrunt
 
 #endif // APEGRUNT_ALIGNMENT_UTILITY_HPP
