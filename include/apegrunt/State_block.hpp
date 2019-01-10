@@ -25,6 +25,9 @@
 #include <cctype>
 #include <functional> // for std::hash
 
+#include <bitset>
+#include <limits>
+
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/nvp.hpp>
 
@@ -32,17 +35,15 @@
 
 namespace apegrunt {
 
-template< typename MaskT, uint N, typename StencilT >
+template< typename MaskT, std::size_t N, typename StencilT >
 constexpr MaskT create_clear( StencilT stencil ) { MaskT mask=0; uint n=0; while( n < N ) { mask = mask | ( MaskT(stencil) << n*8*sizeof(StencilT) ); ++n; } return mask; }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 //struct alignas(sizeof(void*)) State_block
 struct alignas(Size) State_block
 {
 	using state_t = StateT;
 	enum { N=Size };
-	//enum { CLEAR=uint8_t(state_t::state_t::GAP) };
-	//enum { CLEAR=uint8_t(get_gap_state<state_t>()) };
 	enum { CLEAR=uint8_t(gap_state<state_t>::value) };
 	using row_t = std::array<state_t,N>;
 	using my_type = State_block< StateT, N >;
@@ -155,19 +156,19 @@ struct State_block<StateT,8>
 };
 // /*
 // */
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator!=( const State_block<StateT,Size>& lhs, const State_block<StateT,Size>& rhs ) { return !(lhs == rhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator> ( const State_block<StateT,Size>& lhs, const State_block<StateT,Size>& rhs ) { return (rhs < lhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator<=( const State_block<StateT,Size>& lhs, const State_block<StateT,Size>& rhs ) { return !(lhs > rhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator>=( const State_block<StateT,Size>& lhs, const State_block<StateT,Size>& rhs ) { return !(lhs < rhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 std::ostream& operator<< ( std::ostream& os, const State_block<StateT,Size>& block )
 {
 	for( std::size_t i=0; i < Size; ++i )
@@ -177,7 +178,7 @@ std::ostream& operator<< ( std::ostream& os, const State_block<StateT,Size>& blo
 	return os;
 }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 std::size_t count_identical( State_block<StateT,Size> lhs, State_block<StateT,Size> rhs ) { std::size_t n=0; for( std::size_t i=0; i<Size; ++i ) { lhs[i] == rhs[i] && ++n; } return n; }
 
 } // namespace apegrunt
@@ -631,16 +632,16 @@ struct alignas(Size*2) Compressed_state_block
 	}
 };
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator!=( const Compressed_state_block<StateT,Size>& lhs, const Compressed_state_block<StateT,Size>& rhs ) { return !(lhs == rhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator> ( const Compressed_state_block<StateT,Size>& lhs, const Compressed_state_block<StateT,Size>& rhs ) { return (rhs < lhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator<=( const Compressed_state_block<StateT,Size>& lhs, const Compressed_state_block<StateT,Size>& rhs ) { return !(lhs > rhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator>=( const Compressed_state_block<StateT,Size>& lhs, const Compressed_state_block<StateT,Size>& rhs ) { return !(lhs < rhs); }
 
 template< typename StateT, std::size_t Size >
