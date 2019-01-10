@@ -25,8 +25,26 @@
 namespace apegrunt {
 
 // forward declarations
-template< typename RealT, uint N, bool View >
+template< typename RealT, std::size_t N, bool View >
 struct Vector;
+
+template< typename RealT, std::size_t Capacity>
+inline constexpr Vector<RealT,Capacity,false> make_Vector( RealT* const p, std::size_t stride=1 )
+{
+	return Vector<RealT,Capacity,false>(p,stride);
+}
+
+template< typename RealT, std::size_t Capacity>
+inline constexpr Vector<RealT,Capacity,false> make_Vector( const RealT& e )
+{
+	return Vector<RealT,Capacity,false>(e);
+}
+
+template< typename RealT, std::size_t Capacity>
+inline Vector<RealT,Capacity,true> make_Vector_view( RealT* const p, std::size_t stride=1 )
+{
+	return Vector<RealT,Capacity,true>(p,stride);
+}
 
 } // namespace apegrunt
 
