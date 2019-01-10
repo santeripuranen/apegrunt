@@ -27,19 +27,23 @@ namespace apegrunt {
 // s(i,j) = vector i of N states : [ s(0,0), s(0,1), ..., s(0,BlockSize-1), s(1,0), s(1,0), ..., s(1,BlockSize-1), ...,s(N,0), s(N,1), ..., s(N,BlockSize-1) ]
 template< std::size_t VectorSize > struct STATES_AccessOrder_tag {
 	enum { N=VectorSize };
-	static std::size_t ptr_increment( std::size_t state, std::size_t block_pos, std::size_t block_extent=0 )
+	static inline constexpr std::size_t ptr_increment( std::size_t state, std::size_t block_pos, std::size_t block_extent=0 )
 	{
 		return (state*block_extent+block_pos)*VectorSize; // [0,0,0,0,...,1,1,1,1,...,2,2,2,2...]
 	}
+
+	static inline constexpr std::size_t column_stride( std::size_t block_extent ) { return N*block_extent; }
 };
 
 // s(i,j) = vector i of N states : [ s(0,0), s(1,0), ..., s(N,0), s(0,1), s(1,1), ..., s(N,1), ..., s(0,N), s(1,N), ..., s(N,BlockSize-1) ]
 template< std::size_t VectorSize > struct MATRICES_AccessOrder_tag {
 	enum { N=VectorSize };
-	static std::size_t ptr_increment( std::size_t state, std::size_t block_pos, std::size_t block_extent=0 )
+	static inline constexpr std::size_t ptr_increment( std::size_t state, std::size_t block_pos, std::size_t block_extent=0 )
 	{
 		return (state+block_pos*VectorSize)*VectorSize; // [0,1,2,3,0,1,2,3,0,1,2,3,...]
 	}
+
+	static inline constexpr std::size_t column_stride( std::size_t block_extent=0 ) { return N; }
 };
 
 } // namespace apegrunt
