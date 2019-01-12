@@ -158,6 +158,14 @@ public:
 		//m_modify.unlock();
 	}
 
+	void join( my_type& other )
+	{
+		auto&& scope_lock = this->lock();
+		other.lock();
+		this->reserve( this->size()+other.size() );
+		for( auto& edge: other ) { m_edges.push_back( edge ); }
+	}
+
 	inline lock_t lock() { return std::move( lock_t(m_modify) ); }
 
 	inline node_id_t capacity() const { return m_edges.capacity(); }
