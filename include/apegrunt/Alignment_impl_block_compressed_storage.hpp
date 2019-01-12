@@ -332,7 +332,7 @@ public:
 
 		const std::size_t n_loci = this->n_loci();
 		const std::size_t n_seqs = m_rows.size();
-		const std::size_t n_block_column_groups = n_loci / N + ( n_loci % N == 0 ? 0 : 1 );
+		const std::size_t n_block_column_groups = apegrunt::get_number_of_blocks(n_loci); // n_loci / N + ( n_loci % N == 0 ? 0 : 1 );
 		const std::size_t indexing_overhead_mem = std::accumulate( cbegin(m_rows), cend(m_rows), std::size_t(0), [=]( std::size_t sum, const auto& seq ) { return sum += seq->bytesize(); } );
 		const std::size_t dense_indexing_overhead_mem = sizeof(block_index_t)*n_block_column_groups*n_seqs;
 /*
@@ -619,8 +619,9 @@ private:
 	    const std::size_t n_loci_per_block = apegrunt::StateBlock_size;
 	    const std::size_t last_block_size = apegrunt::get_last_block_size(this->n_loci());
 	    const std::size_t last_block = apegrunt::get_last_block_index(this->n_loci());
+	    const std::size_t number_of_blocks = apegrunt::get_number_of_blocks(this->n_loci());
 
-		for( std::size_t n_block=0; n_block < last_block+1; ++n_block )
+		for( std::size_t n_block=0; n_block < number_of_blocks; ++n_block )
 		{
 			const auto n_end = ( n_block == last_block ? last_block_size : n_loci_per_block );
 			//auto&& fcovariance_block_kernel = fcovariance_matrix_storage.get_fcovariance_kernel_for_block( n_block, n_end );
@@ -651,16 +652,17 @@ private:
 	    const std::size_t n_loci = this->n_loci(); // number of columns in the alignment
 	    const std::size_t n_loci_per_block = apegrunt::StateBlock_size;
 	    const std::size_t last_block_size = get_last_block_size(n_loci);
-	    const std::size_t last_block = get_last_block_index(n_loci);
+	    const std::size_t last_block_index = get_last_block_index(n_loci);
+	    const std::size_t number_of_blocks = apegrunt::get_number_of_blocks(this->n_loci());
 
 	    const auto& block_accounting = *(this->get_block_accounting());
 		const auto& blocks = *(this->get_block_storage());
 
 		auto& frequencies = *m_frequencies;
 
-		for( std::size_t n_block=0; n_block < last_block+1; ++n_block )
+		for( std::size_t n_block=0; n_block < number_of_blocks; ++n_block )
 		{
-			const auto n_end = ( n_block == last_block ? last_block_size : n_loci_per_block );
+			const auto n_end = ( n_block == last_block_index ? last_block_size : n_loci_per_block );
 			auto&& column_frequency_accumulator = apegrunt::Column_frequency_accumulator<typename frequency_t::value_type, number_of_states<state_t>::value, apegrunt::StateBlock_size>( frequencies[n_block*n_loci_per_block].data(), n_end );
 			column_frequency_accumulator.setZero();
 			const auto& sequence_blocks = blocks[n_block];
@@ -681,7 +683,8 @@ private:
 	    const std::size_t n_loci = this->n_loci(); // number of columns in the alignment
 	    const std::size_t n_loci_per_block = apegrunt::StateBlock_size;
 	    const std::size_t last_block_size = get_last_block_size(n_loci);
-	    const std::size_t last_block = get_last_block_index(n_loci);
+	    const std::size_t last_block_index = get_last_block_index(n_loci);
+	    const std::size_t number_of_blocks = apegrunt::get_number_of_blocks(this->n_loci());
 
 	    const auto& block_accounting = *(this->get_block_accounting());
 		const auto& blocks = *(this->get_block_storage());
@@ -691,9 +694,9 @@ private:
 
 		auto& frequencies = *m_w_frequencies;
 
-		for( std::size_t n_block=0; n_block < last_block+1; ++n_block )
+		for( std::size_t n_block=0; n_block < number_of_blocks; ++n_block )
 		{
-			const auto n_end = ( n_block == last_block ? last_block_size : n_loci_per_block );
+			const auto n_end = ( n_block == last_block_index ? last_block_size : n_loci_per_block );
 			auto&& column_frequency_accumulator = apegrunt::Column_frequency_accumulator<typename w_frequency_t::value_type, number_of_states<state_t>::value, apegrunt::StateBlock_size>( frequencies[n_block*n_loci_per_block].data(), n_end );
 			column_frequency_accumulator.setZero();
 			const auto& sequence_blocks = blocks[n_block];
@@ -740,11 +743,12 @@ private:
 		const std::size_t n_loci_per_block = apegrunt::StateBlock_size;
 		const std::size_t last_colblock_size = get_last_block_size(n_loci);
 		const std::size_t last_colblockidx = get_last_block_index(n_loci);
+	    const std::size_t number_of_blocks = apegrunt::get_number_of_blocks(this->n_loci());
 
 		const auto& block_accounting = *(this->get_block_accounting());
 		const auto& blocks = *(this->get_block_storage());
 
-		for( std::size_t colblockidx=0; colblockidx < last_colblockidx+1; ++colblockidx )
+		for( std::size_t colblockidx=0; colblockidx < number_of_blocks; ++colblockidx )
 		{
 			const auto& sequence_blocks = blocks[colblockidx];
 			const auto& indices = block_accounting[colblockidx];
@@ -798,7 +802,7 @@ private:
 		}
 
 		// zero out padding elements of the last column block
-		for( std::size_t i = this->n_loci() % N; i < N; ++i ) { statepresence_blocks.back()[i] = 0; statecount_blocks.back()[i] = 0; }
+		for( std::size_t i = apegrunt::get_last_block_size(this->n_loci()); i < N; ++i ) { statepresence_blocks.back()[i] = 0; statecount_blocks.back()[i] = 0; }
 		//std::cout << "m_statecount_blocks->size()=" << m_statecount_blocks->size() << " m_statepresence_blocks->size()=" << m_statepresence_blocks->size() << std::endl;
 	}
 

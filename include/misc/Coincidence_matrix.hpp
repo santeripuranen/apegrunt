@@ -168,8 +168,8 @@ public:
 	  m_r_states(alignment->size()),
 	  m_initialize_with(initialize_with),
 	  m_n_loci(alignment->n_loci()),
-	  m_last_block_size(apegrunt::get_last_block_size(m_n_loci-1)),
-	  m_last_block_index(apegrunt::get_last_block_index(m_n_loci-1)),
+	  m_last_block_size(apegrunt::get_last_block_size(m_n_loci)),
+	  m_last_block_index(apegrunt::get_last_block_index(m_n_loci)),
 	  m_cached_block_weights(),
 	  m_cached_block_col(0)
 	{

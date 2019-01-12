@@ -28,9 +28,9 @@ namespace apegrunt {
 
 enum { StateBlock_size = 16 };
 
-static constexpr std::size_t get_last_block_size( std::size_t n_columns ) { return ((n_columns-1) % StateBlock_size )+1; }
-static constexpr std::size_t get_last_block_index( std::size_t n_columns ) { return (n_columns-1) / StateBlock_size; }
-static constexpr std::size_t get_number_of_blocks( std::size_t n_columns ) { return (n_columns-1) / StateBlock_size + 1; }
+static constexpr std::size_t get_last_block_size( std::size_t n_columns ) { return n_columns == 0 ? 0 : ((n_columns-1) % StateBlock_size )+1; }
+static constexpr std::size_t get_last_block_index( std::size_t n_columns ) { return n_columns == 0 ? 0 : (n_columns / StateBlock_size) - ( n_columns % StateBlock_size == 0 ? 1 : 0 ); }
+static constexpr std::size_t get_number_of_blocks( std::size_t n_columns ) { return n_columns == 0 ? 0 : get_last_block_index(n_columns) + 1; }
 
 } // namespace apegrunt
 
