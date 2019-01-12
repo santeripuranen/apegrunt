@@ -57,7 +57,7 @@ static std::ostream& operator<< ( std::ostream& os, const Graph_output_formatter
 				<< index2 << " "
 				//<< m_distance(index1,index2) << " "
 				//<< edge << " "
-				<< edge.weight()
+				<< edge.weight() << " "
 				<< bool(edge)
 				<< "\n";
 	}
