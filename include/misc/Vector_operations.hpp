@@ -40,8 +40,9 @@ template< typename RealT, std::size_t Capacity, bool View, typename IntegerT >
 inline RealT mask_sum( const Vector<RealT,Capacity,View>& v, IntegerT mask )
 {
 	RealT s = 0;
-	const std::bitset<std::numeric_limits<IntegerT>::digits> m(mask);
-	for( std::size_t i=0; i < Capacity; ++i ) { s += m[i] ? v[i] : RealT(0); }
+	//const std::bitset<std::numeric_limits<IntegerT>::digits> m(mask);
+	//for( std::size_t i=0; i < Capacity; ++i ) { if( m[i] ) { s += v[i]; } }
+	for( std::size_t i=0; i < Capacity; ++i ) { if( mask & (1<<i) ) { s += v[i]; } }
 	return s;
 }
 
@@ -61,6 +62,13 @@ inline Vector<RealT,Capacity> xaddlogx( const Vector<RealT,Capacity,View>& x )
 	return x + log(x);
 }
 
+template< typename RealT >
+inline RealT xlogx( RealT x )
+{
+	using std::log;
+	return x * log(x);
+}
+
 template< typename RealT, std::size_t Capacity, bool View >
 inline Vector<RealT,Capacity> xlogx( const Vector<RealT,Capacity,View>& x )
 {
@@ -72,8 +80,9 @@ inline Vector<RealT,Capacity> mask_xaddlogx( const Vector<RealT,Capacity,View>& 
 {
 	using std::log;
 	Vector<RealT,Capacity> v;
-	const std::bitset<std::numeric_limits<IntegerT>::digits> m(mask);
-	for( std::size_t i=0; i < Capacity; ++i ) { v[i] = m[i] ? x[i] + log( x[i] ) : RealT(0); }
+	//const std::bitset<std::numeric_limits<IntegerT>::digits> m(mask);
+	//for( std::size_t i=0; i < Capacity; ++i ) { v[i] = m[i] ? x[i] + log( x[i] ) : RealT(0); }
+	for( std::size_t i=0; i < Capacity; ++i ) { v[i] = ( mask & (1<<i) ) ? x[i] + log( x[i] ) : RealT(0); }
 	return v;
 }
 
@@ -82,9 +91,30 @@ inline Vector<RealT,Capacity> mask_xlogx( const Vector<RealT,Capacity,View>& x, 
 {
 	using std::log;
 	Vector<RealT,Capacity> v;
-	const std::bitset<std::numeric_limits<IntegerT>::digits> m(mask);
-	for( std::size_t i=0; i < Capacity; ++i ) { v[i] = m[i] ? x[i] * log( x[i] ) : RealT(0); }
+	//const std::bitset<std::numeric_limits<IntegerT>::digits> m(mask);
+	//for( std::size_t i=0; i < Capacity; ++i ) { v[i] = m[i] ? x[i] * log( x[i] ) : RealT(0); }
+	for( std::size_t i=0; i < Capacity; ++i ) { v[i] = ( mask & (1<<i) ) ? x[i] * log( x[i] ) : RealT(0); }
 	return v;
+}
+
+template< typename RealT, std::size_t Capacity, bool View, typename IntegerT >
+inline RealT mask_sum_xlogx( const Vector<RealT,Capacity,View>& x, IntegerT mask )
+{
+	using std::log;
+	RealT s(0);
+	//const std::bitset<std::numeric_limits<IntegerT>::digits> m(mask);
+	//for( std::size_t i=0; i < Capacity; ++i ) { if( m[i] ) { s += x[i] * log( x[i] ); } }
+	for( std::size_t i=0; i < Capacity; ++i ) { if( mask & (1<<i) ) { s += x[i] * log( x[i] ); } }
+	return s;
+}
+
+template< typename RealT, std::size_t Capacity, bool View >
+inline RealT guard_sum_xlogx( const Vector<RealT,Capacity,View>& x )
+{
+	using std::log;
+	RealT s(0);
+	for( std::size_t i=0; i < Capacity; ++i ) { if( x[i] != 0 ) { s += x[i] * log( x[i] ); } }
+	return s;
 }
 
 // basic binary arithmetic operators
@@ -158,6 +188,15 @@ inline Vector<RealT,Capacity> popcnt_per_element( Vector<RealT,Capacity,View> a 
 
 
 #ifndef NO_INTRINSICS
+
+#ifdef __SSE2__
+inline Vector<uint8_t,16,false> operator| ( Vector<uint8_t,16,false> lhs, Vector<uint8_t,16,false> rhs )
+{
+	return Vector<uint8_t,16,false>( _mm_or_si128( lhs(), rhs() ) );
+}
+#endif // __SSE2__
+
+
 #ifdef __AVX__
 
 inline double sum( __m256d a )
@@ -175,7 +214,12 @@ inline double sum( const Vector<double,4,false>& v )
 {
 	return sum( v() ); // forward to sum( __m256d a )
 }
-
+// /*
+inline double sum( const Vector<double,5,false>& v )
+{
+	return sum( Vector<double,4,false>( v.data() ) ) + v[4];
+}
+// */
 template< uint Exponent >
 inline constexpr __m256d pow( __m256d x ) { __m256d result = x; for( std::size_t i=1; i<Exponent; ++i ) { result = result * x; } return result; }
 template<>
