@@ -67,7 +67,7 @@ public:
 		{
 			const auto state = std::size_t( stateblock[i] );
 			//std::cout << "i=" << i << " state=" << state << " incr=" << AccessOrder::ptr_increment(state,i,m_extent) << " " << vector << "\n";
-			vector_view_t( m_data + AccessOrder::ptr_increment(state,i,m_extent) ) += vector();
+			vector_view_t( m_data + AccessOrder::ptr_increment(state,i,m_extent) ) += vector;
 		}
 	}
 
@@ -79,7 +79,7 @@ public:
 			if( i != exclude )
 			{
 				const auto state = std::size_t( stateblock[i] );
-				vector_view_t( m_data + AccessOrder::ptr_increment(state,i,m_extent) ) += vector();
+				vector_view_t( m_data + AccessOrder::ptr_increment(state,i,m_extent) ) += vector;
 			}
 		}
 	}
@@ -91,7 +91,7 @@ public:
 		{
 			for( std::size_t state=0; state < N; ++state )
 			{
-				vector_view_t( m_data + MATRICES_AccessOrder_tag<N>::ptr_increment(state,i,m_extent) ) = zero();
+				vector_view_t( m_data + MATRICES_AccessOrder_tag<N>::ptr_increment(state,i,m_extent) ) = zero;
 			}
 		}
 	}
@@ -103,7 +103,7 @@ public:
 		{
 			for( std::size_t state=0; state < N; ++state )
 			{
-				vector_view_t( m_data + MATRICES_AccessOrder_tag<N>::ptr_increment(state,i,m_extent) ) = val();
+				vector_view_t( m_data + MATRICES_AccessOrder_tag<N>::ptr_increment(state,i,m_extent) ) = val;
 			}
 		}
 
