@@ -301,10 +301,12 @@ bool Apegrunt_options_base::CheckOptions( boost::program_options::variables_map 
 {
 	try
 	{
+		/*
 		if( s_verbose && s_out )
 		{
 			*s_out << "apegrunt: being verbose." << std::endl;
 		}
+		*/
 
 		if( !varmap->count("alignmentfile") && s_err )
 		{
@@ -350,7 +352,7 @@ void Apegrunt_options_base::s_init_verbose( bool flag )
 {
 	if( flag && s_out )
 	{
-		*s_out << "apegrunt: begin verbose.\n";
+		//*s_out << "apegrunt: begin verbose.\n";
 	}
 }
 
