@@ -50,7 +50,7 @@ std::vector<RealT> calculate_weights( apegrunt::Alignment_ptr<StateT> alignment 
 	cputimer.stop();
 	if( Apegrunt_options::verbose() ) { cputimer.print_timing_stats(); }
 
-	if( Apegrunt_options::verbose() ) { *Apegrunt_options::get_out_stream() << "apegrunt: get sequence weights"; Apegrunt_options::get_out_stream()->flush(); }
+	if( Apegrunt_options::verbose() ) { *Apegrunt_options::get_out_stream() << "apegrunt: calculate sequence weights"; Apegrunt_options::get_out_stream()->flush(); }
 	cputimer.start();
 	std::size_t nonidentical_pairs = 0;
 	std::size_t sum = 0;
@@ -61,8 +61,9 @@ std::vector<RealT> calculate_weights( apegrunt::Alignment_ptr<StateT> alignment 
 		const auto seq_i_multiplicity = seq_i->multiplicity();
 		for( std::size_t j = 0; j < i; ++j )
 		{
+
 			const std::size_t n_elem = std::min( seq_i_size, ali[j]->size() );
-			const auto identity = real_t( n_elem - dmat[ i*(i-1)/2+j ]) / real_t(n_elem);
+			const auto identity = real_t( n_elem - dmat[ i*(i-1)/2+j ] ) / real_t(n_elem);
 			min_identity = std::min( min_identity, identity );
 			max_identity = std::max( max_identity, identity );
 
