@@ -38,16 +38,16 @@ struct Vector
 	inline Vector( const Vector<RealT,Capacity>& v ) { for( std::size_t i=0; i < N; ++i ) { m_elem[i] = v.m_elem[i]; } }
 	inline Vector( element_t e ) { for( std::size_t i=0; i < N; ++i ) { m_elem[i] = e; } }
 	inline Vector( element_t e, uint8_t mask ) { for( std::size_t i=0; i < N; ++i ) { m_elem[i] = bool( mask & (1<<i) ) ? e : 0; } }
-	inline Vector( element_t* const p, std::size_t stride=1 ) { for( std::size_t i=0; i < N; ++i ) { m_elem[i] = *(p+i*stride); } }
+	inline Vector( const element_t* const p, std::size_t stride=1 ) { for( std::size_t i=0; i < N; ++i ) { m_elem[i] = *(p+i*stride); } }
 
 	inline my_type& operator=( Vector<RealT,Capacity>&& v ) { for( std::size_t i=0; i < N; ++i ) { m_elem[i] = v.m_elem[i]; } return *this; }
 	inline my_type& operator=( const Vector<RealT,Capacity>& v ) { for( std::size_t i=0; i < N; ++i ) { m_elem[i] = v.m_elem[i]; } return *this; }
 
-	element_t* data() { return m_elem; }
-	const element_t* data() const { return m_elem; }
+	inline element_t* data() { return m_elem; }
+	inline const element_t* data() const { return m_elem; }
 
-	my_type& operator()() { return *this; }
-	const my_type& operator()() const { return *this; }
+	inline my_type& operator()() { return *this; }
+	inline const my_type& operator()() const { return *this; }
 
 	inline constexpr element_t& operator[]( uint i ) { return m_elem[i]; }
 	inline constexpr const element_t& operator[]( uint i ) const { return m_elem[i]; }
@@ -98,7 +98,9 @@ struct Vector<RealT,Capacity,true>
 	using element_t = RealT;
 	using my_type = Vector<element_t,N,true>;
 
+	Vector() = delete; // Vector views always need pointer to storage
 	inline constexpr Vector( element_t* const p, std::size_t stride=1 ) : m_p(p), m_stride(stride) { }
+	inline constexpr Vector( my_type&& v ) : m_p( std::move(v.m_p) ), m_stride( std::move(v.m_stride) ) { }
 	inline constexpr Vector( const my_type& v ) : m_p(v.m_p), m_stride(v.m_stride) { }
 	// generic Vector
 	inline my_type& operator=( Vector<RealT,Capacity>&& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] = v.m_elem[i]; } return *this; }
@@ -107,11 +109,11 @@ struct Vector<RealT,Capacity,true>
 	inline my_type& operator=( my_type&& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] = v.m_elem[i]; } return *this; }
 	inline my_type& operator=( const my_type& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] = v.m_elem[i]; } return *this; }
 
-	element_t* data() { return m_p; }
-	const element_t* data() const { return m_p; }
+	inline element_t* data() { return m_p; }
+	inline const element_t* data() const { return m_p; }
 
-	my_type& operator()() { return *this; }
-	const my_type& operator()() const { return *this; }
+	inline my_type& operator()() { return *this; }
+	inline const my_type& operator()() const { return *this; }
 
 	inline constexpr element_t& operator[]( uint i ) { return *(m_p+i*m_stride); }
 	inline constexpr const element_t& operator[]( uint i ) const { return *(m_p+i*m_stride); }
@@ -125,6 +127,11 @@ struct Vector<RealT,Capacity,true>
 	template< bool ViewFlag >
 	inline my_type& operator/=( const Vector<RealT,Capacity,ViewFlag>& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] /= v[i]; } return *this; }
 
+	inline my_type& operator+=( RealT e ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] += e; } return *this; }
+	inline my_type& operator-=( RealT e ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] -= e; } return *this; }
+	inline my_type& operator*=( RealT e ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] *= e; } return *this; }
+	inline my_type& operator/=( RealT e ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] /= e; } return *this; }
+
 	element_t* const m_p;
 	const std::size_t m_stride;
 };
@@ -137,7 +144,74 @@ namespace apegrunt {
 
 #ifndef NO_INTRINSICS
 
+#ifdef __SSE2__
+
+template<>
+struct alignas(16) Vector<uint8_t,16,false>
+{
+	enum { N=16 };
+	using element_t = uint8_t;
+	using simd_t = __m128i;
+	using my_type = Vector<element_t,N,false>;
+
+	inline Vector() : m_vec( _mm_setzero_si128() ) { }
+ 	inline Vector( Vector<element_t,N>&& v ) noexcept : m_vec(v()) { }
+	inline Vector( const Vector<element_t,N>& v ) : m_vec(v()) { }
+	inline Vector( simd_t v ) : m_vec(v) { }
+	inline Vector( element_t e ) : m_vec( _mm_set1_epi8(e) ) { }
+	inline Vector( const element_t* const e, std::size_t stride=1 )
+	{
+		switch(stride)
+		{
+			case 1: m_vec = _mm_loadu_si128( (__m128i const*)e ); break;
+			default: for( std::size_t i=0; i < N; ++i ) { m_elem[i] = *(e+i*stride); }
+		}
+	}
+
+	inline my_type& operator=( Vector<element_t,N>&& v ) { m_vec = v(); return *this; }
+	inline my_type& operator=( const Vector<element_t,N>& v ) { m_vec = v(); return *this; }
+
+	inline my_type& operator=( simd_t v ) { m_vec = v; return *this; }
+
+	inline element_t* data() { return m_elem; }
+	inline const element_t* data() const { return m_elem; }
+
+	inline simd_t operator()() { return m_vec; }
+	inline simd_t operator()() const { return m_vec; }
+
+	inline element_t& operator[]( uint i ) { return m_elem[i]; }
+	inline const element_t& operator[]( uint i ) const { return m_elem[i]; }
+
+	template< bool ViewFlag >
+	inline my_type& operator+=( const Vector<element_t,N,ViewFlag>& v ) { m_vec = _mm_add_epi8( m_vec, v() ); return *this; }
+	template< bool ViewFlag >
+	inline my_type& operator-=( const Vector<element_t,N,ViewFlag>& v ) { m_vec = _mm_sub_epi8( m_vec, v() ); return *this; }
+	template< bool ViewFlag >
+	inline my_type& operator*=( const Vector<element_t,N,ViewFlag>& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] *= v[i]; }; return *this; }
+	template< bool ViewFlag >
+	inline my_type& operator/=( const Vector<element_t,N,ViewFlag>& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] /= v[i]; }; return *this; }
+/*
+	inline my_type& operator+=( const simd_t v ) { m_vec += v; return *this; }
+	inline my_type& operator-=( const simd_t v ) { m_vec -= v; return *this; }
+	inline my_type& operator*=( const simd_t v ) { m_vec *= v; return *this; }
+	inline my_type& operator/=( const simd_t v ) { m_vec /= v; return *this; }
+*/
+	inline my_type& operator+=( element_t e ) { m_vec += my_type(e)(); return *this; }
+	inline my_type& operator-=( element_t e ) { m_vec -= my_type(e)(); return *this; }
+	inline my_type& operator*=( element_t e ) { m_vec *= my_type(e)(); return *this; }
+	inline my_type& operator/=( element_t e ) { m_vec /= my_type(e)(); return *this; }
+
+	union
+	{
+		element_t m_elem[N];
+		simd_t m_vec;
+	};
+};
+
+#endif // __SSE2__
+
 #ifdef __AVX__
+
 template<>
 struct alignas(32) Vector<double,4,false>
 {
@@ -151,18 +225,25 @@ struct alignas(32) Vector<double,4,false>
 	inline Vector( const Vector<element_t,N>& v ) : m_vec(v()) { }
 	inline Vector( simd_t v ) : m_vec(v) { }
 	inline Vector( double e ) : m_vec( _mm256_set1_pd(e) ) { }
-	inline Vector( double* const e ) : m_vec( _mm256_broadcast_sd(e) ) { }
+	inline Vector( const double* const e, std::size_t stride=1 )
+	{
+		switch(stride)
+		{
+			case 1: m_vec = _mm256_loadu_pd(e); break;
+			default: for( std::size_t i=0; i < N; ++i ) { m_elem[i] = *(e+i*stride); }
+		}
+	}
 
 	inline my_type& operator=( Vector<element_t,N>&& v ) { m_vec = v(); return *this; }
 	inline my_type& operator=( const Vector<element_t,N>& v ) { m_vec = v(); return *this; }
 
 	inline my_type& operator=( simd_t v ) { m_vec = v; return *this; }
 
-	element_t* data() { return m_elem; }
-	const element_t* data() const { return m_elem; }
+	inline element_t* data() { return m_elem; }
+	inline const element_t* data() const { return m_elem; }
 
-	simd_t operator()() { return m_vec; }
-	simd_t operator()() const { return m_vec; }
+	inline simd_t operator()() { return m_vec; }
+	inline simd_t operator()() const { return m_vec; }
 
 	inline element_t& operator[]( uint i ) { return m_elem[i]; }
 	inline const element_t& operator[]( uint i ) const { return m_elem[i]; }
@@ -211,16 +292,16 @@ struct Vector<double,4,true>
 
 	inline my_type& operator=( simd_t v ) { this->store( v ); return *this; }
 
-	element_t* data() { return m_p; }
-	const element_t* data() const { return m_p; }
+	inline element_t* data() { return m_p; }
+	inline const element_t* data() const { return m_p; }
 
-	simd_t operator()() { return _mm256_load_pd(m_p); }
-	simd_t operator()() const { return _mm256_load_pd(m_p); }
+	inline simd_t operator()() { return _mm256_load_pd(m_p); }
+	inline simd_t operator()() const { return _mm256_load_pd(m_p); }
 
 	inline element_t& operator[]( uint i ) { return *(m_p+i); }
 	inline const element_t& operator[]( uint i ) const { return *(m_p+i); }
 
-	void inline store( simd_t vec ) { _mm256_store_pd( m_p, vec ); }
+	inline void store( simd_t vec ) { _mm256_store_pd( m_p, vec ); }
 
 	template< bool ViewFlag >
 	inline my_type& operator+=( const Vector<element_t,N,ViewFlag>& v ) { this->store( _mm256_add_pd( (*this)(), v() ) ); return *this; }
