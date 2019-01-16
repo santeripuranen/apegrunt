@@ -26,19 +26,58 @@
 
 namespace apegrunt {
 
-template< typename StateT >
+inline std::size_t linear_distance( std::size_t pos1, std::size_t pos2 )
+{
+    return std::abs( int64_t(pos1) - int64_t(pos2) );
+}
+
+inline std::size_t circular_distance( std::size_t pos1, std::size_t pos2, std::size_t circle_size )
+{
+	const auto d = linear_distance(pos1,pos2);
+    return std::min( circle_size-d, d );
+}
+
+struct CircularDistance
+{
+	CircularDistance() = delete;
+	CircularDistance( std::size_t circle_size ) : m_circle_size( circle_size ) { }
+
+	inline std::size_t operator()( std::size_t pos1, std::size_t pos2 ) const
+	{
+		return circular_distance( pos1, pos2, m_circle_size );
+	}
+
+	const std::size_t m_circle_size;
+};
+
+struct LinearDistance
+{
+	LinearDistance() = delete;
+	LinearDistance( std::size_t circle_size=0 ) { }
+
+	inline std::size_t operator()( std::size_t pos1, std::size_t pos2 ) const
+	{
+		return linear_distance( pos1, pos2 );
+	}
+};
+
+template< typename StateT, typename DistanceT=LinearDistance >
 struct Graph_output_formatter
 {
 	Graph_output_formatter( const Graph_ptr& graph, const Alignment_ptr<StateT>& alignment ) //, std::size_t (*	const distance)(std::size_t,std::size_t) )
 	: m_graph(graph),
-	  m_alignment(alignment)
-	  //m_distance(distance)
+	  m_alignment(alignment),
+	  m_distance(alignment->n_original_positions())
 	{
 	}
 
+	inline std::size_t distance( std::size_t pos1, std::size_t pos2 ) const
+	{
+		return m_distance(pos1,pos2);
+	}
 	const Graph_ptr m_graph;
 	const Alignment_ptr<StateT> m_alignment;
-	//std::size_t (*const m_distance)(std::size_t,std::size_t);
+	DistanceT m_distance;
 };
 
 template< typename StateT >
@@ -50,15 +89,17 @@ static std::ostream& operator<< ( std::ostream& os, const Graph_output_formatter
 
 	for( const auto& edge: *(gof.m_graph) )
 	{
-		const auto index1 = index_translation[edge.id().first()]+base_index;
-		const auto index2 = index_translation[edge.id().second()]+base_index;
+		const auto index1 = index_translation[edge.node1()]+base_index;
+		const auto index2 = index_translation[edge.node2()]+base_index;
 
-		os << index1 << " "
-				<< index2 << " "
-				//<< m_distance(index1,index2) << " "
-				//<< edge << " "
-				<< edge.weight() << " "
-				<< bool(edge)
+		os.precision(6);
+		os << index1 << " " << index2
+				//<< " " << edge.node1()
+				//<< " " << edge.node2()
+				<< std::fixed
+				<< " " << /*std::scientific <<*/ edge.weight()
+				<< " " << gof.distance(index1,index2)
+				<< " " << bool(edge)
 				<< "\n";
 	}
 	return os;

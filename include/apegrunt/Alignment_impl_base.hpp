@@ -152,6 +152,9 @@ public:
     inline statecount_block_storage_ptr get_statecount_blocks() { return statecount_block_storage_ptr(); } // default implementation returns empty shared_ptr
     inline statepresence_block_storage_ptr get_statepresence_blocks() { return statepresence_block_storage_ptr(); } // default implementation returns empty shared_ptr
 
+    inline std::size_t n_original_positions() const { return m_n_original_positions; }
+    inline void set_n_original_positions( std::size_t npositions ) { m_n_original_positions = npositions; }
+
 private:
 	using derived_type = AlignmentT;
 	using cast_t = derived_type* const;
@@ -160,6 +163,7 @@ private:
 
 	std::string m_id_string;
 	Loci_ptr m_loci_translation_table;
+	std::size_t m_n_original_positions;
 
 	virtual Alignment_ptr<state_t> clone_impl() const { return static_cast<const_cast_t>(this)->clone(); }
 	//virtual Alignment_ptr move_impl() const { return static_cast<const_cast_t>(this)->move(); }
@@ -180,6 +184,8 @@ private:
 
     std::size_t n_loci_impl() const override { return static_cast<const_cast_t>(this)->n_loci(); }
     //std::size_t get_index_of_impl( const StateVector_ptr& query ) const override { return static_cast<const_cast_t>(this)->get_index_of(query); }
+    std::size_t n_original_positions_impl() const override { return static_cast<const_cast_t>(this)->n_original_positions(); }
+    void set_n_original_positions_impl( std::size_t npositions ) override { static_cast<cast_t>(this)->set_n_original_positions( npositions ); }
 
     frequencies_ptr frequencies_impl() const override { return static_cast<const_cast_t>(this)->frequencies(); }
     w_frequencies_ptr w_frequencies_impl() const override { return static_cast<const_cast_t>(this)->w_frequencies(); }

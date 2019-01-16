@@ -81,6 +81,7 @@ public:
 		auto new_alignment = std::make_shared<AlignmentT>();
 		new_alignment->set_id_string( alignment->id_string()+ ( accept_list->id_string().empty() ? "" : "."+accept_list->id_string() ) );
 		new_alignment->set_loci_translation( combine(alignment->get_loci_translation(), accept_list) );
+		new_alignment->set_n_original_positions( alignment->n_original_positions());
 
 		//std::cout << " {create new alignment"; std::cout.flush();
 
@@ -135,6 +136,7 @@ public:
 		auto new_alignment = std::make_shared<AlignmentT>();
 		new_alignment->set_id_string( alignment->id_string()+"."+sample_name);
 		new_alignment->set_loci_translation( alignment->get_loci_translation() );
+		new_alignment->set_n_original_positions( alignment->n_original_positions());
 
 		for( auto seqindex: *accept_list )
 		{
@@ -151,6 +153,7 @@ public:
 	{
 		auto new_alignment = std::make_shared<AlignmentT>();
 		new_alignment->set_id_string( alignment->id_string()+".transposed" );
+		//new_alignment->set_n_original_positions( alignment->n_original_positions());
 
 		for( std::size_t pos = 0; pos < alignment->n_loci(); ++pos )
 		{
@@ -185,6 +188,7 @@ public:
 		auto new_alignment = std::make_shared<alignment_t>();
 		new_alignment->set_id_string( alignment->id_string()+"."+"4-states" );
 		new_alignment->set_loci_translation( alignment->get_loci_translation() );
+		new_alignment->set_n_original_positions( alignment->n_original_positions());
 
 		for( const auto sequence: alignment )
 		{

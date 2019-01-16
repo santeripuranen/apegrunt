@@ -95,6 +95,7 @@ public:
 	static bool rescale_sample_weights();
 	static bool output_sample_distance_matrix();
 
+	static std::size_t genome_size();
 	static bool linear_genome();
 	static bool variable_penalty(); // not used at the moment
 	static std::size_t distance_penalty_threshold(); // not used at the moment
@@ -145,6 +146,7 @@ private:
 	static bool s_rescale_sample_weights;
 	static bool s_output_sample_distance_matrix;
 
+	static std::size_t s_genome_size;
 	static bool s_linear_genome;
 	static bool s_variable_penalty;
 	static std::size_t s_distance_penalty_threshold;
@@ -194,6 +196,7 @@ private:
 	static void s_init_sample_reweighting_threshold( double threshold );
 	static void s_init_output_sample_weights( bool flag );
 	static void s_init_output_sample_distance_matrix( bool flag );
+	static void s_init_genome_size( std::size_t npositions );
 	static void s_init_linear_genome( bool flag );
 	static void s_init_variable_penalty( bool flag );
 	static void s_init_distance_penalty_threshold( std::size_t value );

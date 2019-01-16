@@ -57,6 +57,7 @@ Alignment_ptr< typename AlignmentT::state_t > parse_Alignment( std::istream* ins
 		apegrunt::parsers::Alignment_parser_FASTA_grammar< iterator_t, AlignmentT > parser;
 		bool success = boost::spirit::qi::phrase_parse(begin, end, parser, ascii::space, alignment);
 	}
+	alignment->set_n_original_positions( Apegrunt_options::genome_size() != 0 ? Apegrunt_options::genome_size() : alignment->n_loci() );
 	return alignment;
 }
 
@@ -80,6 +81,7 @@ Alignment_ptr< typename AlignmentT::state_t > parse_Alignment( const std::string
 		if( success )
 		{
 			alignment->set_id_string( filepath.stem().c_str() );
+			alignment->set_n_original_positions( Apegrunt_options::genome_size() != 0 ? Apegrunt_options::genome_size() : alignment->n_loci() );
 		}
 	}
 	return alignment;

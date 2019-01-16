@@ -132,6 +132,8 @@ public:
 
     //> Return the number of (least common denominator) columns in the contained alignment
     inline std::size_t n_loci() const { return this->n_loci_impl(); }
+    inline std::size_t n_original_positions() const { return this->n_original_positions_impl(); }
+    inline void set_n_original_positions( std::size_t npositions ) { this->set_n_original_positions_impl( npositions ); }
 
     inline frequencies_ptr frequencies() const { return this->frequencies_impl(); }
     inline w_frequencies_ptr w_frequencies() const { return this->w_frequencies_impl(); }
@@ -176,6 +178,8 @@ private:
     virtual void set_id_string_impl( const std::string& id_string ) = 0;
 
     virtual std::size_t n_loci_impl() const = 0;
+    virtual std::size_t n_original_positions_impl() const = 0;
+    virtual void set_n_original_positions_impl( std::size_t npositions ) = 0;
 
     virtual frequencies_ptr frequencies_impl() const = 0;
     virtual w_frequencies_ptr w_frequencies_impl() const = 0;

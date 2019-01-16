@@ -128,6 +128,7 @@ bool Apegrunt_options_base::s_no_sample_reweighting = false;
 bool Apegrunt_options_base::s_rescale_sample_weights = false;
 bool Apegrunt_options_base::s_output_sample_distance_matrix = false;
 
+std::size_t Apegrunt_options_base::s_genome_size = 0;
 bool Apegrunt_options_base::s_linear_genome = false;
 bool Apegrunt_options_base::s_variable_penalty = false;
 std::size_t Apegrunt_options_base::s_distance_penalty_threshold = 500;
@@ -200,6 +201,7 @@ bool Apegrunt_options_base::rescale_sample_weights() { return s_rescale_sample_w
 bool Apegrunt_options_base::output_sample_weights() { return s_output_sample_weights; }
 bool Apegrunt_options_base::output_sample_distance_matrix() { return s_output_sample_distance_matrix; }
 
+std::size_t Apegrunt_options_base::genome_size() { return s_genome_size; }
 bool Apegrunt_options_base::linear_genome() { return s_linear_genome; }
 bool Apegrunt_options_base::variable_penalty() { return s_variable_penalty; }
 std::size_t Apegrunt_options_base::distance_penalty_threshold() { return s_distance_penalty_threshold; }
@@ -269,6 +271,7 @@ m_general_options.add_options()
 		("output-sample-weights", po::bool_switch( &Apegrunt_options_base::s_output_sample_weights )->default_value(Apegrunt_options_base::s_output_sample_weights)->notifier(Apegrunt_options_base::s_init_output_sample_weights), "Output sample weights.")
 		("output-sample-distance-matrix", po::bool_switch( &Apegrunt_options_base::s_output_sample_distance_matrix )->default_value(Apegrunt_options_base::s_output_sample_distance_matrix)->notifier(Apegrunt_options_base::s_init_output_sample_distance_matrix), "Output triangular sample-sample Hamming distance matrix.")
 
+		("genome-size", po::value< std::size_t >( &Apegrunt_options_base::s_genome_size )->notifier(Apegrunt_options_base::s_init_genome_size), "Genome size, if different from input. Default = 0: detect size from input.")
 		("linear-genome", po::bool_switch( &Apegrunt_options_base::s_linear_genome )->default_value(Apegrunt_options_base::s_linear_genome)->notifier(Apegrunt_options_base::s_init_linear_genome), "Assume linear genome in distance calculations.")
 //		("variable-penalty", po::bool_switch( &Apegrunt_options_base::s_variable_penalty )->default_value(Apegrunt_options_base::s_variable_penalty)->notifier(Apegrunt_options_base::s_init_variable_penalty), "Use a column-wise varaible penalty function.")
 //		("distance-penalty-threshold", po::value< std::size_t >( &Apegrunt_options_base::s_distance_penalty_threshold )->default_value(Apegrunt_options_base::s_distance_penalty_threshold)->notifier(Apegrunt_options_base::s_init_distance_penalty_threshold), "Distance threshold for the variable regularization/penalty function.")
@@ -425,6 +428,14 @@ void Apegrunt_options_base::s_init_output_sample_distance_matrix( bool flag )
 	if( flag && s_verbose && s_out )
 	{
 		*s_out << "apegrunt: output triangular sample-sample Hamming distance matrix to file.\n";
+	}
+}
+
+void Apegrunt_options_base::s_init_genome_size( std::size_t npositions )
+{
+	if( npositions != 0 && s_verbose && s_out )
+	{
+		*s_out << "apegrunt: genome size set to " << npositions << ".\n";
 	}
 }
 
