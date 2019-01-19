@@ -69,8 +69,8 @@ template< typename AlignmentT >
 class Alignment_factory
 {
 public:
-	Alignment_factory() { }
-	~Alignment_factory() { }
+	Alignment_factory() = default;
+	~Alignment_factory() = default;
 
 	template< typename StateT >
 	Alignment_ptr<StateT> operator()( Alignment_ptr<StateT> alignment, const Loci_ptr accept_list ) const
@@ -81,7 +81,7 @@ public:
 		auto new_alignment = std::make_shared<AlignmentT>();
 		new_alignment->set_id_string( alignment->id_string()+ ( accept_list->id_string().empty() ? "" : "."+accept_list->id_string() ) );
 		new_alignment->set_loci_translation( combine(alignment->get_loci_translation(), accept_list) );
-		new_alignment->set_n_original_positions( alignment->n_original_positions());
+		new_alignment->set_n_original_positions( alignment->n_original_positions() );
 
 		//std::cout << " {create new alignment"; std::cout.flush();
 
@@ -89,6 +89,7 @@ public:
 		for( const auto sequence: alignment )
 		{
 			auto new_sequence = StateVector_mutator<typename AlignmentT::statevector_t>( new_alignment->get_new_sequence( sequence->id_string() ) );
+			new_sequence.set_weight( sequence->weight() ); // transfer weights
 
 			for( const auto locus_index: accept_list )
 			{
@@ -142,6 +143,7 @@ public:
 		{
 			auto sequence = (*alignment)[seqindex];
 			auto new_sequence = StateVector_mutator<typename AlignmentT::statevector_t>( new_alignment->get_new_sequence( sequence->id_string() ) );
+			//new_sequence.set_weight( sequence->weight() ); // not transferring weights here, since the set of samples changes
 			for( const auto state: sequence ) {	new_sequence(state); }
 		}
 		//new_alignment->get_block_accounting();
@@ -174,8 +176,8 @@ template<>
 class Alignment_factory< Alignment_impl_block_compressed_storage< StateVector_impl_block_compressed_alignment_storage<triallelic_state_t> > >
 {
 public:
-	Alignment_factory() { }
-	~Alignment_factory() { }
+	Alignment_factory() = default;
+	~Alignment_factory() = default;
 
 	using block_storage_t = StateVector_impl_block_compressed_alignment_storage<triallelic_state_t>;
 	using alignment_t = Alignment_impl_block_compressed_storage< block_storage_t >;
