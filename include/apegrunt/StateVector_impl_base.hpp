@@ -44,7 +44,7 @@ public:
 	enum { block_size = block_type::N };
 
 	StateVector_impl_base() : m_multiplicity(1), m_weight(1) { }
-	~StateVector_impl_base() override = default;
+	virtual ~StateVector_impl_base() = default;
 
 	StateVector_impl_base( const std::string& id_string, std::size_t multiplicity=1, weight_type weight=1 ) : m_multiplicity(multiplicity), m_weight(weight), m_id_string(id_string) { }
 

@@ -108,8 +108,8 @@ public:
 	using statepresence_block_storage_t = std::vector< statepresence_block_t >;
 	using statepresence_block_storage_ptr = std::shared_ptr< statepresence_block_storage_t >;
 
-	Alignment() { }
-    virtual ~Alignment() { } // enable derived classes to be destructed through Alignment_ptr
+	Alignment() = default;
+    virtual ~Alignment() = default; // enable derived classes to be destructed through Alignment_ptr
 
     Alignment_ptr<state_t> clone() const { return this->clone_impl(); } // clone the object, leaving the callee valid and unmodified.
 

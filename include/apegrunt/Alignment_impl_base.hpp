@@ -80,8 +80,8 @@ public:
 	using statepresence_block_storage_t = typename Alignment<state_t>::statepresence_block_storage_t;
 	using statepresence_block_storage_ptr = typename Alignment<state_t>::statepresence_block_storage_ptr;
 
-	Alignment_impl_base() { }
-	~Alignment_impl_base() override { }
+	Alignment_impl_base() = default;
+	virtual ~Alignment_impl_base() override = default;
 
 	Alignment_impl_base( const std::string& id_string ) : m_id_string(id_string) { }
 
