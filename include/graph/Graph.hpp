@@ -151,6 +151,9 @@ public:
 	{
 	}
 
+	inline edge_t& operator[]( std::size_t i ) { return m_edges[i]; }
+	inline const edge_t& operator[]( std::size_t i ) const { return m_edges[i]; }
+
 	// Add a now node. Caller should lock before calling add(), if used in a parallel setting.
 	inline void add( node_id_t i, node_id_t j, real_t weight )
 	{
