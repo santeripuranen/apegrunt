@@ -35,7 +35,10 @@ public:
 	~StateVector_mutator() { m_statevector->flush_block_buffer(); }
 
 	template< typename StateT >
-	void operator()( StateT state ) { m_statevector->push_back( state ); }
+	inline void operator()( StateT state ) { m_statevector->push_back( state ); }
+
+	template< typename RealT >
+	inline void set_weight( RealT weight ) { m_statevector->set_weight( weight ); }
 
 private:
 	StateVectorT *m_statevector;

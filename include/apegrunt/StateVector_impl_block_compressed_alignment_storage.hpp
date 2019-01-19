@@ -302,10 +302,10 @@ private:
 		if( N == m_pos ) { this->flush_block_buffer(); }
 	}
 
-	bool append( const std::string& state_string )
+	inline bool append( const std::string& state_string )
 	{
 		m_block_indices.reserve( m_block_indices.size() + state_string.size()/N + (state_string.size() % N == 0 ? 0 : 1) );
-		for( auto state: state_string ) { this->push_back( state ); }
+		for( const auto& state: state_string ) { this->push_back( state ); }
 		this->flush_block_buffer();
 		return true;
 	}
@@ -336,13 +336,7 @@ private:
 	{
 		if(m_dirty)
 		{
-			/*
-			std::size_t count = 0;
-			for( std::size_t i = 0; i < N; ++i ) { count += ( i%2 != 0 ? (m_cache[i-1] == m_cache[i]) : 0 ); }
-			std::cout << "duals=" << count << "\n";
-			*/
-
-			if( m_block_storage->size() < m_block_col+1 ) { m_block_storage->emplace_back( 1, m_cache ); /*m_block_storage->back().reserve(10);*/ m_block_indices.push_back(0); }
+			if( m_block_storage->size() < m_block_col+1 ) { m_block_storage->emplace_back( 1, m_cache ); m_block_indices.push_back(0); }
 			else
 			{
 				using std::cbegin; using std::cend;
@@ -412,6 +406,9 @@ public:
 
 	template< typename StateT2 >
 	void operator()( StateT2 state ) { m_statevector->push_back( state ); }
+
+	template< typename RealT >
+	inline void set_weight( RealT weight ) { m_statevector->set_weight( weight ); }
 
 private:
 	statevector_t *m_statevector;
