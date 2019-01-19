@@ -50,7 +50,7 @@ template< typename IteratorT, typename AlignmentT >
 struct Alignment_parser_FASTA_grammar
 	: qi::grammar< IteratorT, Alignment_ptr<typename AlignmentT::state_t>(), qi::locals< std::shared_ptr<AlignmentT>, typename AlignmentT::statevector_t* >, ascii::space_type >
 {
-	static const std::string s_fasta_tag;
+	static const char s_fasta_tag;
 
 	using space_t = ascii::space_type;
 
@@ -103,7 +103,7 @@ struct Alignment_parser_FASTA_grammar
 };
 
 template< typename IteratorT, typename AlignmentT >
-const std::string Alignment_parser_FASTA_grammar<IteratorT, AlignmentT>::s_fasta_tag = ">";
+const char Alignment_parser_FASTA_grammar<IteratorT, AlignmentT>::s_fasta_tag = '>';
 
 } // namespace parsers
 
