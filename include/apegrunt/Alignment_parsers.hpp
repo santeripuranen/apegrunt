@@ -83,6 +83,7 @@ Alignment_ptr< typename AlignmentT::state_t > parse_Alignment( const std::string
 			alignment->set_id_string( filepath.stem().c_str() );
 			alignment->set_n_original_positions( Apegrunt_options::genome_size() != 0 ? Apegrunt_options::genome_size() : alignment->n_loci() );
 		}
+		mmap.close();
 	}
 	return alignment;
 }

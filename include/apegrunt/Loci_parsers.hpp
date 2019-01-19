@@ -78,6 +78,7 @@ Loci_ptr parse_Loci_list( const std::string& infilename, std::size_t base_index=
 		{
 			loci->set_id_string( filepath.stem().c_str() );
 		}
+		mmap.close();
 	}
 	return loci;
 }
