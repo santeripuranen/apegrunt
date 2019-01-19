@@ -316,13 +316,12 @@ public:
 
 	block_indices_ptr get_block_indices() const
     {
-    	auto indices_ptr = std::make_shared<block_indices_t>();
-    	auto& indices = *(indices_ptr.get());
-    	indices.reserve( m_block_storage->size() );
-
-    	for( std::size_t i=0; i < m_block_storage->size(); ++i ) { indices.push_back(i); }
-
-    	return indices_ptr;
+		// this is a silly function.. should use something like boost::irange instead
+		auto indices_ptr = std::make_shared<block_indices_t>();
+		auto& indices = *indices_ptr;
+		indices.reserve( m_block_storage->size() );
+		for( std::size_t i=0; i < m_block_storage->size(); ++i ) { indices.push_back(i); }
+		return indices_ptr;
     }
 
 	void statistics( std::ostream *out=nullptr ) const
@@ -409,7 +408,7 @@ public:
 		const std::size_t cnucs_mem = cnucs*sizeof(state_t);
 		const std::size_t gnucs_mem = n_gblocks*N*sizeof(state_t);
 
-		*out << "apegrunt: alignment has " << n_seqs << " sequences and " << n_loci << " loci (" << onucs << " nucleotides in total)\n";
+		*out << "apegrunt: alignment has " << n_seqs << " samples and " << n_loci << " positions (" << onucs << " outcomes in total)\n";
 		*out << "apegrunt: alignment has " << SNPs << " SNPs in total\n";
 		*out << "apegrunt: state distribution [#states:#positions] =";
 		for( std::size_t i=1; i < state_stats.size(); ++i )
@@ -707,7 +706,6 @@ private:
 				column_frequency_accumulator.accumulate( sequence_blocks[block_index], indices[block_index], weights.data() );
 			}
 		}
-		//std::cout << "} " << std::endl;
 	}
 /*
 	// the triangular sample-sample Hamming distance matrix
