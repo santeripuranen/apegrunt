@@ -75,7 +75,7 @@ RealT norm( const std::vector< std::size_t >& v )
 }
 
 template< typename StateT >
-std::vector< Alignment_ptr<StateT> > get_alignments( std::size_t max_alignments=-1 )
+std::vector< Alignment_ptr<StateT> > get_alignments( std::size_t max_alignments=std::numeric_limits<std::size_t>::max() )
 {
 	using state_t = StateT;
 	using alignment_default_storage_t = apegrunt::Alignment_impl_block_compressed_storage< apegrunt::StateVector_impl_block_compressed_alignment_storage<state_t> >;
@@ -88,7 +88,7 @@ std::vector< Alignment_ptr<StateT> > get_alignments( std::size_t max_alignments=
 	{
 		if( apegrunt::Apegrunt_options::get_alignment_filenames().size() > max_alignments )
 		{
-			*Apegrunt_options::get_err_stream() << "apegrunt error: will not accept more than 2 alignments (got " << apegrunt::Apegrunt_options::get_alignment_filenames().size() << " filenames).\n\n";
+			*Apegrunt_options::get_err_stream() << "apegrunt error: will not accept more than " << max_alignments << " alignment" << (max_alignments == 1 ? " " : "s") << "(got " << apegrunt::Apegrunt_options::get_alignment_filenames().size() << " filenames).\n\n";
 			return alignments;
 		}
 
@@ -126,6 +126,39 @@ std::vector< Alignment_ptr<StateT> > get_alignments( std::size_t max_alignments=
 	{
 		*Apegrunt_options::get_err_stream() << "apegrunt: no input files specified!\n\n";
 		exit(EXIT_FAILURE);
+	}
+	if( apegrunt::Apegrunt_options::has_mappinglist_filename() )
+	{
+		if( Apegrunt_options::verbose() )
+		{
+			*Apegrunt_options::get_out_stream() << "apegrunt: get mapping list from file \"" << apegrunt::Apegrunt_options::get_mappinglist_filename() << "\"\n";
+		}
+		cputimer.start();
+		auto mapping = apegrunt::parse_Loci_list( apegrunt::Apegrunt_options::get_mappinglist_filename(), apegrunt::Apegrunt_options::get_input_indexing_base() );
+		cputimer.stop();
+
+		auto alignment = alignments.front();
+
+		if( alignment->n_loci() != mapping->size() )
+		{
+			*Apegrunt_options::get_err_stream() << "apegrunt: mapping list and alignment sizes are mismatched (" << mapping->size() << " and " << alignment->n_loci() << ")\n\n";
+			cputimer.print_timing_stats();
+			exit(EXIT_FAILURE);
+		}
+		else
+		{
+			if( Apegrunt_options::verbose() )
+			{
+				*Apegrunt_options::get_out_stream() << "apegrunt: associate mapping list with \"" << alignment->id_string() << "\"\n";
+			}
+
+			alignment->set_loci_translation( mapping );
+
+			if( Apegrunt_options::verbose() )
+			{
+				cputimer.print_timing_stats(); *Apegrunt_options::get_out_stream() << "\n";
+			}
+		}
 	}
 	return alignments;
 }
@@ -174,7 +207,7 @@ void cache_sample_weights( Alignment_ptr<StateT> alignment )
 		{
 			if( Apegrunt_options::verbose() )
 			{
-				*Apegrunt_options::get_out_stream() << "apegrunt: calculate sequence weights" << std::endl;
+				*Apegrunt_options::get_out_stream() << "apegrunt: calculate sample weights" << std::endl;
 			}
 
 			auto weights = calculate_weights( alignment );
@@ -197,7 +230,12 @@ void cache_sample_weights( Alignment_ptr<StateT> alignment )
 			}
 		}
 
-		cputimer.stop(); cputimer.print_timing_stats(); *Apegrunt_options::get_out_stream() << "\n";
+		cputimer.stop();
+		if( Apegrunt_options::verbose() )
+		{
+			*Apegrunt_options::get_out_stream() << "apegrunt: effective sample size = " << alignment->effective_size() << "\n";
+			cputimer.print_timing_stats(); *Apegrunt_options::get_out_stream() << "\n";
+		}
 	}
 	// output weights
 	if( Apegrunt_options::output_sample_weights() )
@@ -588,13 +626,6 @@ private:
 		std::size_t state_count;
 		std::size_t locus_index;
 	};
-/*
-	template< typename ContainerT, typename T >
-	struct back_inserter {
-		back_inserter( ContainerT& container, const T& ) : m_container(container) { }
-		template< typename T > T& operator()( const T& a ) { m_container.push_back(a.state)
-	};
-*/
 
 	template< typename StateT >
 	std::array<std::size_t,number_of_states<StateT>::value+1> get_state_statistics( const Alignment_ptr<StateT> alignment ) const
@@ -636,7 +667,6 @@ private:
 	template< typename StateT >
 	Loci_ptr get_filter_list( const Alignment_ptr<StateT> alignment ) const
 	{
-		//std::cout << " {get filter list"; std::cout.flush();
 		using state_t = StateT;
 		using std::begin; using std::end; using std::cbegin; using std::cend;
 
@@ -644,58 +674,34 @@ private:
 
 		std::vector<index_and_state_count_association> proto_accept_list;
 		std::vector<std::size_t> accept_list;
-		//std::cout << "apegrunt: get columnwise frequencies"; std::cout.flush();
-		const auto freq_vec = columnwise_frequencies( alignment );
-		//std::cout << " done" << std::endl;
+
+		auto freq_vec = columnwise_frequencies( alignment );
 
 		std::size_t total_SNPs=0;
 		std::size_t current_locus=0;
 
-		for( const auto& freq: freq_vec ) // loop over all sequence positions
+		for( auto& freq: freq_vec ) // loop over all sequence positions
 		{
 			const std::size_t n = freq.size()-1; // number of states (excluding gaps); states are ordered such that the 'GAP' state is always the last
 
 			std::size_t n_significant = 0;
 			std::size_t n_nz = 0;
-/*
-			std::size_t totaln_nz = 0;
 
-			for( std::size_t i = 0; i < number_of_states<state_t>::value; ++i )
-			{
-				freq[i] > 0 && ++totaln_nz;
-			}
-*/
-			//std::cout << "[";
 			for( std::size_t i = 0; i < n; ++i )
 			{
-				//std::cout << " " << freq[i];
 				freq[i] > 0 && ++n_nz && m_maf_threshold <= freq[i] && ++n_significant; // mark state as significant if its frequency is at least maf_threshold
 			}
-			//std::cout << " ]\n";
 
 			if( m_state_rule(n_significant) && n_nz < apegrunt::number_of_states<state_t>::value && (freq[std::size_t( gap_state<state_t>::value )] <= m_gap_threshold) ) // && n_nz == n_significant )
 			{
 				accept_list.push_back(current_locus);
-				//proto_accept_list.emplace_back(n_nz,current_locus);
 			}
 
 			n_nz > 1 && ++total_SNPs;
 
-//			statef[totaln_nz] += 1;
-
 			++current_locus;
 		}
 
-		//for( std::size_t i=0; i < statef.size(); ++i ) { std::cout << "apegrunt: " << i << " state = " << statef[i] << "\n"; }
-/*
-		accept_list.reserve(proto_accept_list.size());
-		std::sort(begin(proto_accept_list),end(proto_accept_list));
-		for( const auto& a: proto_accept_list ) { accept_list.push_back(a.locus_index); }
-*/
-		// move last element to first place
-//		accept_list.insert(accept_list.begin(), accept_list[accept_list.size()-1]); accept_list.pop_back();
-
-		//std::cout << "}"; std::cout.flush();
 		return make_Loci_list(std::move(accept_list),0);
 	}
 
@@ -957,7 +963,7 @@ std::vector< std::vector< State_holder<SrcStateT> > > get_transform_list( const 
 	{
 		if( Apegrunt_options::verbose() )
 		{
-			*Apegrunt_options::get_out_stream() << "apegrunt: NOTE: " << n_loci_with_dropped_alleles << " loci will be dropped (" << n_dropped << " alleles in total)" << std::endl;
+			*Apegrunt_options::get_out_stream() << "apegrunt: NOTE: " << n_loci_with_dropped_alleles << " positions will be dropped (" << n_dropped << " alleles in total)" << std::endl;
 		}
 	/*
 		auto dropped_pos_file = apegrunt::get_unique_ofstream( alignment->id_string()+"."+apegrunt::size_string(alignment)+".dropped" );
