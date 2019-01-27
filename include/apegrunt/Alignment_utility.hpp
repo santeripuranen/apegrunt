@@ -321,6 +321,71 @@ std::vector< std::array< RealT, number_of_states<StateT>::N > > weighted_columnw
 	return freq_vec;
 }
 
+template< typename IndexT >
+struct block_list_intersection_container
+{
+	std::vector< std::vector<IndexT> > indices;
+	std::vector< std::pair<std::size_t, std::size_t> > block_pairs;
+
+	std::size_t size() const { return indices.size(); }
+};
+
+template< typename IndexT >
+block_list_intersection_container<IndexT> block_list_intersection( const std::vector< std::vector<IndexT> >& a, const std::vector< std::vector<IndexT> >& b )
+{
+	using std::cbegin; using std::cend; using std::begin;
+
+	block_list_intersection_container<IndexT> intersections;
+	intersections.indices.reserve( a.size()*b.size() );
+	intersections.block_pairs.reserve( a.size()*b.size() );
+
+	// going with indexing here instead of iterators, for simpler block pair tracking below
+	for( std::size_t i=0; i < a.size(); ++i )
+	//for( auto aitr=cbegin(a); aitr != cend(a); ++aitr )
+	{
+		for( std::size_t j=0; j < b.size(); ++j )
+		//for( auto bitr=cbegin(b); bitr != cend(b); ++bitr )
+		{
+			std::vector<IndexT> isect;
+			isect.reserve( std::min(a[i].size(), b[j].size()) ); // can't need more than this, but might be less
+
+			const auto isect_end = std::set_intersection(
+					cbegin(a[i]), cend(a[i]),
+					cbegin(b[j]), cend(b[j]),
+					std::back_inserter(isect)
+			);
+/*
+			//std::vector<IndexT> isect; isect.reserve( std::min(aitr->size(),bitr->size()) );
+
+			const auto isect_end = std::set_intersection(
+					cbegin(*aitr), cend(*aitr),
+					cbegin(*bitr), cend(*bitr),
+					std::back_inserter(isect)
+			);
+*/
+			if( isect.size() > 0 )
+			{
+				intersections.indices.emplace_back( std::move(isect) );
+				intersections.block_pairs.emplace_back( i, j );
+			}
+		}
+	}
+	return intersections;
+}
+
+template< typename RealT, typename IndexT >
+std::vector<RealT> block_list_intersection_weights( const block_list_intersection_container<IndexT>& container, const std::vector<RealT>& sample_weights )
+{
+	std::vector<RealT> block_weights; block_weights.reserve( container.indices.size() );
+	for( const auto& indices: container.indices )
+	{
+		RealT wsum(0);
+		for( const auto index: indices ) { wsum += sample_weights[index]; }
+		block_weights.push_back( wsum );
+	}
+	return block_weights;
+}
+
 template< typename StateT >
 bool output_frequencies( const Alignment_ptr<StateT> alignment, std::ostream *os=nullptr, bool weighted=false )
 {
@@ -359,7 +424,6 @@ bool output_frequency_distribution( const Alignment_ptr<StateT> alignment, std::
 	}
 	return false;
 }
-
 
 template< typename StateT >
 void output_state_frequencies( const Alignment_ptr<StateT> alignment )
@@ -691,7 +755,6 @@ private:
 			{
 				freq[i] > 0 && ++n_nz && m_maf_threshold <= freq[i] && ++n_significant; // mark state as significant if its frequency is at least maf_threshold
 			}
-
 			if( m_state_rule(n_significant) && n_nz < apegrunt::number_of_states<state_t>::value && (freq[std::size_t( gap_state<state_t>::value )] <= m_gap_threshold) ) // && n_nz == n_significant )
 			{
 				accept_list.push_back(current_locus);
@@ -743,7 +806,7 @@ sequence_sample(
 namespace detail
 {
 template< typename StateT, typename RealT >
-struct state_frequency_pair : public extend_comparison_operators
+struct state_frequency_pair : public apegrunt::extend_comparison_operators
 {
 	using state_t = StateT;
 	using real_t = RealT;
@@ -759,18 +822,18 @@ struct state_frequency_pair : public extend_comparison_operators
 	my_type& operator=( const my_type& rhs ) { freq=rhs.freq; state=rhs.state; return *this; }
 	my_type& operator=( my_type&& rhs ) noexcept { freq=std::move(rhs.freq); state=std::move(rhs.state); return *this; }
 
-	bool operator==( const my_type& rhs ) const { return freq == rhs.freq; }
-	bool operator<( const my_type& rhs ) const { return freq < rhs.freq; }
+	constexpr inline bool operator==( const my_type& rhs ) const { return freq == rhs.freq; }
+	constexpr inline bool operator<( const my_type& rhs ) const { return freq < rhs.freq; }
 };
 /*
 template< typename StateT, typename RealT >
-inline bool operator!=( const state_frequency_pair<StateT,RealT>& lhs, const state_frequency_pair<StateT,RealT>& rhs ) { return !(lhs == rhs); }
+constexpr inline bool operator!=( const state_frequency_pair<StateT,RealT>& lhs, const state_frequency_pair<StateT,RealT>& rhs ) { return !(lhs == rhs); }
 template< typename StateT, typename RealT >
-inline bool operator>( const state_frequency_pair<StateT,RealT>& lhs, const state_frequency_pair<StateT,RealT>& rhs ) { return (rhs < lhs); }
+constexpr inline bool operator>( const state_frequency_pair<StateT,RealT>& lhs, const state_frequency_pair<StateT,RealT>& rhs ) { return (rhs < lhs); }
 template< typename StateT, typename RealT >
-inline bool operator<=( const state_frequency_pair<StateT,RealT>& lhs, const state_frequency_pair<StateT,RealT>& rhs ) { return !(lhs > rhs); }
+constexpr inline bool operator<=( const state_frequency_pair<StateT,RealT>& lhs, const state_frequency_pair<StateT,RealT>& rhs ) { return !(lhs > rhs); }
 template< typename StateT, typename RealT >
-inline bool operator>=( const state_frequency_pair<StateT,RealT>& lhs, const state_frequency_pair<StateT,RealT>& rhs ) { return !(lhs < rhs); }
+constexpr inline bool operator>=( const state_frequency_pair<StateT,RealT>& lhs, const state_frequency_pair<StateT,RealT>& rhs ) { return !(lhs < rhs); }
 */
 } // namespace detail
 
