@@ -73,7 +73,7 @@ public:
 	~Alignment_factory() = default;
 
 	template< typename StateT >
-	Alignment_ptr<StateT> operator()( Alignment_ptr<StateT> alignment, const Loci_ptr accept_list ) const
+	Alignment_ptr<StateT> operator()( const Alignment_ptr<StateT> alignment, const Loci_ptr accept_list ) const
 	{
 		using boost::get;
 		using std::cbegin; using std::cend;
