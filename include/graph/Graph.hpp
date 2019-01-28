@@ -181,8 +181,12 @@ public:
 	inline void reserve( std::size_t n ) { m_edges.reserve(n); }
 	inline std::size_t size() const { return m_edges.size(); }
 
-	// sort in descending order of weight
-	inline void sort() { std::sort( this->begin(), this->end(), [](edge_t a, edge_t b) { return (a.weight() == b.weight()) ? (a.id() > b.id()) : (a.weight() > b.weight()); } ); }
+	// sort edges in descending order of weight, or whatever you'd prefer
+	template< typename Compare=bool(const edge_t&, const edge_t&) >
+	inline void sort( Compare comp=[](const edge_t& a, const edge_t& b) { return (a.weight() == b.weight()) ? (a.id() > b.id()) : (a.weight() > b.weight()); } )
+	{
+		std::sort( this->begin(), this->end(), comp );
+	}
 
 	inline edge_itr_t begin() { using std::begin; return begin(m_edges); }
 	inline edge_itr_t end() { using std::end; return end(m_edges); }
