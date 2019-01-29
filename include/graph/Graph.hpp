@@ -46,17 +46,17 @@ struct EdgeID : public apegrunt::extend_comparison_operators
 	enum { ID_UNFLAG_MASK = ~create_flag_mask<id_t>() };
 	enum { NODE_ID_UNFLAG_MASK = ~create_flag_mask<node_id_t>() };
 
-	EdgeID( node_id_t i, node_id_t j ) : m_i( std::min(i,j) ), m_j( std::max(i,j) )
+	EdgeID() = delete;
+	inline constexpr EdgeID( node_id_t i, node_id_t j ) : m_i( std::min(i,j) ), m_j( std::max(i,j) )
 	{
-		//std::cout << "EdgeID(): m_i=" << m_i << " m_j=" << m_j << " m_id=" << m_id << std::endl;
 	}
-	constexpr EdgeID( id_t id ) : m_id(id) { }
+	inline constexpr EdgeID( id_t id ) : m_id(id) { }
 	~EdgeID() = default;
 
-	constexpr EdgeID( const my_type& other ) : m_id( other.m_id ) { }
-	constexpr EdgeID( my_type&& other ) : m_id( std::move(other.m_id) ) { }
+	inline constexpr EdgeID( const my_type& other ) : m_id( other.m_id ) { }
+	inline constexpr EdgeID( my_type&& other ) : m_id( std::move(other.m_id) ) { }
 
-	constexpr my_type& operator=( const my_type& other ) { m_id = other.m_id; }
+	inline constexpr my_type& operator=( const my_type& other ) { m_id = other.m_id; }
 
 	union
 	{
@@ -94,13 +94,13 @@ struct Edge : public apegrunt::extend_comparison_operators
 	using my_type = Edge;
 
 	Edge() = delete;
-	Edge( node_id_t i, node_id_t j, real_t w ) : m_id(i,j), m_w(w) { }
+	inline constexpr Edge( node_id_t i, node_id_t j, real_t w ) : m_id(i,j), m_w(w) { }
 	~Edge() = default;
 
-	Edge( const my_type& other ) : m_id( other.m_id ), m_w( other.m_w ) { }
-	Edge( my_type&& other ) : m_id( std::move(other.m_id) ), m_w( std::move(other.m_w) ) { }
+	inline constexpr Edge( const my_type& other ) : m_id( other.m_id ), m_w( other.m_w ) { }
+	inline constexpr Edge( my_type&& other ) : m_id( std::move(other.m_id) ), m_w( std::move(other.m_w) ) { }
 
-	constexpr my_type& operator=( const my_type& rhs ) { m_id = rhs.m_id; m_w = rhs.m_w; }
+	inline constexpr my_type& operator=( const my_type& rhs ) { m_id = rhs.m_id; m_w = rhs.m_w; }
 
 	id_t m_id;
 	real_t m_w;
