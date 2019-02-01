@@ -164,6 +164,18 @@ inline Vector<RealT,Capacity> operator<< ( Vector<RealT,Capacity,View> lhs, Stat
 
 // bitwise AND for array elements
 template< typename RealT, std::size_t Capacity, bool View, bool View2 >
+inline Vector<RealT,Capacity> operator& ( Vector<RealT,Capacity,View> lhs, Vector<RealT,Capacity,View2> rhs )
+{
+	Vector<RealT,Capacity> v;
+	for( std::size_t i = 0; i < Capacity; ++i )
+	{
+		v[i] = lhs[i] & rhs[i];
+	}
+	return v;
+}
+
+// bitwise OR for array elements
+template< typename RealT, std::size_t Capacity, bool View, bool View2 >
 inline Vector<RealT,Capacity> operator| ( Vector<RealT,Capacity,View> lhs, Vector<RealT,Capacity,View2> rhs )
 {
 	Vector<RealT,Capacity> v;
@@ -186,10 +198,26 @@ inline Vector<RealT,Capacity> popcnt_per_element( Vector<RealT,Capacity,View> a 
 	return v;
 }
 
+template< typename RealT, std::size_t Capacity, bool View >
+inline std::size_t popcnt( Vector<RealT,Capacity,View> a )
+{
+	std::size_t s;
+	for( std::size_t i = 0; i < Capacity; ++i )
+	{
+		// OK, this is a lazy _and_ slow solution, but it works
+		s += std::bitset<std::numeric_limits<RealT>::digits>(a[i]).count();
+	}
+	return s;
+}
 
 #ifndef NO_INTRINSICS
 
 #ifdef __SSE2__
+inline Vector<uint8_t,16,false> operator& ( Vector<uint8_t,16,false> lhs, Vector<uint8_t,16,false> rhs )
+{
+	return Vector<uint8_t,16,false>( _mm_and_si128( lhs(), rhs() ) );
+}
+
 inline Vector<uint8_t,16,false> operator| ( Vector<uint8_t,16,false> lhs, Vector<uint8_t,16,false> rhs )
 {
 	return Vector<uint8_t,16,false>( _mm_or_si128( lhs(), rhs() ) );
