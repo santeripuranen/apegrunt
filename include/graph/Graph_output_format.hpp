@@ -62,10 +62,10 @@ static std::ostream& operator<< ( std::ostream& os, const Graph_output_formatter
 		os << index1 << " " << index2
 				//<< " " << edge.node1()
 				//<< " " << edge.node2()
-				<< std::fixed
-				<< " " << /*std::scientific <<*/ edge.weight()
 				<< " " << gof.distance(index1,index2)
 				<< " " << bool(edge)
+				<< std::fixed
+				<< " " << /*std::scientific <<*/ edge.weight()
 				<< "\n";
 	}
 	return os;
