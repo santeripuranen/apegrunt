@@ -122,7 +122,7 @@ public:
 private:
 // all the member variables
 
-	static uint s_state; // 1 for normal operation, 0 signals a wish to (gracefully) terminate process
+	//static uint s_state; // 1 for normal operation, 0 signals a wish to (gracefully) terminate process
 	static bool s_verbose;
 
 	static std::vector< std::string > s_alignment_file_names;

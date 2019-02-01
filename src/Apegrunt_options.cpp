@@ -27,7 +27,7 @@ namespace apegrunt {
 std::ostream* Apegrunt_options_base::s_out = nullptr;
 std::ostream* Apegrunt_options_base::s_err = nullptr;
 
-uint Apegrunt_options_base::s_state = 1;
+//uint Apegrunt_options_base::s_state = 1;
 bool Apegrunt_options_base::s_verbose = false;
 
 std::size_t Apegrunt_options_base::s_output_indexing_base = 1;
@@ -156,7 +156,7 @@ const std::string& Apegrunt_options_base::s_get_usage_string() { return s_usage_
 const std::string& Apegrunt_options_base::s_get_version_string() { return s_version_string; }
 const std::string& Apegrunt_options_base::s_get_title_string() { return s_title_string; }
 
-uint Apegrunt_options_base::state() const { return s_state; }
+//uint Apegrunt_options_base::state() const { return s_state; }
 
 void Apegrunt_options_base::set_out_stream( std::ostream *out ) { s_out = out->good() ? out : nullptr; }
 void Apegrunt_options_base::set_err_stream( std::ostream *err ) { s_err = err->good() ? err : nullptr; }
