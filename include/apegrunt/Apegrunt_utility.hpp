@@ -73,6 +73,19 @@ inline bool operator<=( const T& lhs, const T& rhs ) { return !(lhs > rhs); }
 template< typename T, typename std::enable_if< std::is_same< typename T::enable_extended_comparison_operators,std::true_type >::type >::type >
 inline bool operator>=( const T& lhs, const T& rhs ) { return !(lhs < rhs); }
 
+// Binary search in an iterator-defined range; returns an iterator to the matching element, else last.
+template< typename IteratorT >
+inline IteratorT binary_search( IteratorT first, IteratorT last, const typename IteratorT::value_type& key )
+{
+    for( auto a = first, b = last, mid = first + std::distance(first,last) / 2; a != b; mid = a + std::distance(a,b) / 2 )
+    {
+    	if( *mid == key ) { return mid; }
+        else if( *mid < key ) { a = mid + 1; }
+        else { b = mid; }
+    }
+    return last;
+}
+
 struct my_div_t { uint64_t quot; uint64_t rem; };
 my_div_t my_div( uint64_t n, uint64_t div ) { my_div_t result{}; result.quot=n/div; result.rem=n%div; return result; }
 
