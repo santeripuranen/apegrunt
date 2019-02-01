@@ -159,6 +159,8 @@ public:
 
 	inline statecount_block_storage_ptr get_statecount_blocks() { return this->get_statecount_blocks_impl(); }
 	inline statepresence_block_storage_ptr get_statepresence_blocks() { return this->get_statepresence_blocks_impl(); }
+	inline statepresence_block_storage_ptr get_statepresence_blocks_wo_gaps() { return this->get_statepresence_blocks_wo_gaps_impl(); }
+	inline statepresence_block_storage_ptr get_gappresence_blocks() { return this->get_gappresence_blocks_impl(); }
 private:
 
     virtual Alignment_ptr<state_t> clone_impl() const = 0;
@@ -205,6 +207,8 @@ private:
 
 	virtual statecount_block_storage_ptr get_statecount_blocks_impl() const = 0;
 	virtual statepresence_block_storage_ptr get_statepresence_blocks_impl() const = 0;
+	virtual statepresence_block_storage_ptr get_statepresence_blocks_wo_gaps_impl() const = 0;
+	virtual statepresence_block_storage_ptr get_gappresence_blocks_impl() const = 0;
 };
 
 template< typename StateT > typename Alignment<StateT>::const_iterator begin( const Alignment<StateT>& alignment ) { return alignment.cbegin(); }

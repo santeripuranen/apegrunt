@@ -151,6 +151,8 @@ public:
     inline block_indices_ptr get_block_indices() { return block_indices_ptr(); } // default implementation returns empty shared_ptr
     inline statecount_block_storage_ptr get_statecount_blocks() { return statecount_block_storage_ptr(); } // default implementation returns empty shared_ptr
     inline statepresence_block_storage_ptr get_statepresence_blocks() { return statepresence_block_storage_ptr(); } // default implementation returns empty shared_ptr
+    inline statepresence_block_storage_ptr get_statepresence_blocks_wo_gaps() { return statepresence_block_storage_ptr(); } // default implementation returns empty shared_ptr
+    inline statepresence_block_storage_ptr get_gappresence_blocks() { return statepresence_block_storage_ptr(); } // default implementation returns empty shared_ptr
 
     inline std::size_t n_original_positions() const { return m_n_original_positions; }
     inline void set_n_original_positions( std::size_t npositions ) { m_n_original_positions = npositions; }
@@ -211,6 +213,8 @@ private:
 
     statecount_block_storage_ptr get_statecount_blocks_impl() const override { return static_cast<const_cast_t>(this)->get_statecount_blocks(); }
     statepresence_block_storage_ptr get_statepresence_blocks_impl() const override { return static_cast<const_cast_t>(this)->get_statepresence_blocks(); }
+    statepresence_block_storage_ptr get_statepresence_blocks_wo_gaps_impl() const override { return static_cast<const_cast_t>(this)->get_statepresence_blocks_wo_gaps(); }
+    statepresence_block_storage_ptr get_gappresence_blocks_impl() const override { return static_cast<const_cast_t>(this)->get_gappresence_blocks(); }
 
     iterator erase_impl( iterator first, iterator last ) { return static_cast<cast_t>(this)->erase(first,last); }
 

@@ -294,24 +294,38 @@ public:
 
 	statecount_block_storage_ptr get_statecount_blocks() const
 	{
-		//std::cout << "apegrunt: get_statecount_blocks()" << std::endl;
 		m_cache_statecount_and_statepresence_blocks_mutex.lock();
 		if( !m_statecount_blocks ) { this->cache_statecount_and_statepresence_blocks(); }
 		m_cache_statecount_and_statepresence_blocks_mutex.unlock();
-		//std::cout << "apegrunt: m_statecount_blocks->size()=" << m_statecount_blocks->size() << std::endl;
-		//std::cout << "apegrunt: return m_statecount_blocks" << std::endl;
+
 		return m_statecount_blocks;
 	}
 
 	statepresence_block_storage_ptr get_statepresence_blocks() const
 	{
-		//std::cout << "apegrunt: get_statepresence_blocks()" << std::endl;
 		m_cache_statecount_and_statepresence_blocks_mutex.lock();
 		if( !m_statepresence_blocks ) { this->cache_statecount_and_statepresence_blocks(); }
 		m_cache_statecount_and_statepresence_blocks_mutex.unlock();
-		//std::cout << "apegrunt: m_statepresence_blocks->size()=" << m_statepresence_blocks->size() << std::endl;
-		//std::cout << "apegrunt: return m_statepresence_blocks" << std::endl;
+
 		return m_statepresence_blocks;
+	}
+
+	statepresence_block_storage_ptr get_statepresence_blocks_wo_gaps() const
+	{
+		m_cache_statecount_and_statepresence_blocks_mutex.lock(); // shares mutex with his buddies
+		if( !m_statepresence_blocks_wo_gaps ) { this->cache_statecount_and_statepresence_blocks(); }
+		m_cache_statecount_and_statepresence_blocks_mutex.unlock();
+
+		return m_statepresence_blocks_wo_gaps;
+	}
+
+	statepresence_block_storage_ptr get_gappresence_blocks() const
+	{
+		m_cache_statecount_and_statepresence_blocks_mutex.lock(); // shares mutex with his buddies
+		if( !m_gappresence_blocks ) { this->cache_statecount_and_statepresence_blocks(); }
+		m_cache_statecount_and_statepresence_blocks_mutex.unlock();
+
+		return m_gappresence_blocks;
 	}
 
 	block_indices_ptr get_block_indices() const
@@ -452,6 +466,8 @@ private:
 	mutable distance_matrix_ptr m_distance_matrix;
 	mutable statecount_block_storage_ptr m_statecount_blocks;
 	mutable statecount_block_storage_ptr m_statepresence_blocks;
+	mutable statecount_block_storage_ptr m_statepresence_blocks_wo_gaps;
+	mutable statecount_block_storage_ptr m_gappresence_blocks;
 
 	mutable std::mutex m_cache_block_accounting_mutex;
 	mutable std::mutex m_cache_block_weights_mutex;
@@ -773,7 +789,6 @@ private:
 
 	void cache_statecount_and_statepresence_blocks() const
 	{
-		//std::cout << "apegrunt: cache statecount and statepresence accounting" << std::endl;
 		const auto& blocks = *(this->get_block_storage());
 
 		m_statecount_blocks = std::make_shared< statecount_block_storage_t >(); m_statecount_blocks->reserve( blocks.size() );
@@ -782,8 +797,17 @@ private:
 		m_statepresence_blocks = std::make_shared< statepresence_block_storage_t >(); m_statepresence_blocks->reserve( blocks.size() );
 		auto& statepresence_blocks = *m_statepresence_blocks;
 
+		m_statepresence_blocks_wo_gaps = std::make_shared< statepresence_block_storage_t >(); m_statepresence_blocks_wo_gaps->reserve( blocks.size() );
+		auto& statepresence_blocks_wo_gaps = *m_statepresence_blocks_wo_gaps;
+
+		m_gappresence_blocks = std::make_shared< statepresence_block_storage_t >(); m_gappresence_blocks->reserve( blocks.size() );
+		auto& gappresence_blocks = *m_gappresence_blocks;
+
 		// some temp definitions
 		statecount_block_t ones( statecount_t(1) );
+		statepresence_block_t gaps( 1 << std::size_t(apegrunt::gap_state<state_t>::value) ); // fill gap mask; this will work as long as gaps are in predefined positions
+		statepresence_block_t all_but_gaps( ~(1 << std::size_t(apegrunt::gap_state<state_t>::value)) );
+		//std::cout << "gaps=" << gaps << " allbutgaps=" << all_but_gaps << std::endl;
 
 		// create statepresence masks
 		for( const auto& block_column: blocks )
@@ -795,8 +819,11 @@ private:
 				statepresence_mask = statepresence_mask | ( ones << block );
 			}
 			statepresence_blocks.push_back( statepresence_mask );
+			statepresence_blocks_wo_gaps.push_back( statepresence_mask & all_but_gaps );
+			gappresence_blocks.push_back( statepresence_mask & gaps );
 			statecount_blocks.push_back( apegrunt::popcnt_per_element(statepresence_mask) );
 			//std::cout << " at end:   \"" << statecount_blocks.back() << "\"" << std::endl;
+			//std::cout << "sp=" << statepresence_blocks.back() << " wog=" << statepresence_blocks_wo_gaps.back() << " gp=" << gappresence_blocks.back() << std::endl;
 		}
 
 		// zero out padding elements of the last column block
