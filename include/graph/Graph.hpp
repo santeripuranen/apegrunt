@@ -36,8 +36,9 @@ namespace apegrunt {
 template< typename IntegerT >
 constexpr IntegerT create_flag_mask() { return IntegerT(1) << (std::numeric_limits<IntegerT>::digits-1); }
 
-struct EdgeID : public apegrunt::extend_comparison_operators
+class EdgeID : public apegrunt::extend_comparison_operators
 {
+public:
 	using node_id_t = uint32_t;
 	using id_t = uint64_t;
 	using my_type = EdgeID;
@@ -47,17 +48,27 @@ struct EdgeID : public apegrunt::extend_comparison_operators
 	enum { NODE_ID_UNFLAG_MASK = ~create_flag_mask<node_id_t>() };
 
 	EdgeID() = delete;
-	inline constexpr EdgeID( node_id_t i, node_id_t j ) : m_i( std::min(i,j) ), m_j( std::max(i,j) )
-	{
-	}
+	inline constexpr EdgeID( node_id_t i, node_id_t j ) : m_i( std::min(i,j) ), m_j( std::max(i,j) ) { }
 	inline constexpr EdgeID( id_t id ) : m_id(id) { }
 	~EdgeID() = default;
 
 	inline constexpr EdgeID( const my_type& other ) : m_id( other.m_id ) { }
 	inline constexpr EdgeID( my_type&& other ) : m_id( std::move(other.m_id) ) { }
 
-	inline constexpr my_type& operator=( const my_type& other ) { m_id = other.m_id; }
+	inline constexpr my_type& operator=( const my_type& other ) { m_id = other.m_id; return *this; }
 
+	inline constexpr node_id_t first() const { return m_i & NODE_ID_UNFLAG_MASK; }
+	inline constexpr node_id_t second() const { return m_j & NODE_ID_UNFLAG_MASK; }
+	inline constexpr id_t id() const { return m_id & ID_UNFLAG_MASK; } // return m_id; } // return "m_id & ID_UNFLAG_MASK" if flag not desired
+
+	inline constexpr operator bool() const { return m_id & ID_FLAG_MASK; }
+	inline constexpr void set() { m_id = m_id | ID_FLAG_MASK; }
+	inline constexpr void unset() { m_id = m_id & ID_UNFLAG_MASK; }
+
+	inline constexpr bool operator==( const my_type& rhs ) const { return this->id() == rhs.id(); }
+	inline constexpr bool operator<( const my_type& rhs ) const { return this->id() < rhs.id(); }
+
+private:
 	union
 	{
 		struct {
@@ -66,17 +77,6 @@ struct EdgeID : public apegrunt::extend_comparison_operators
 		};
 		id_t m_id;
 	};
-
-	inline constexpr node_id_t first() const { return m_i & NODE_ID_UNFLAG_MASK; }
-	inline constexpr node_id_t second() const { return m_j & NODE_ID_UNFLAG_MASK; }
-	inline constexpr const id_t& id() const { return m_id; } // return "m_id & ID_UNFLAG_MASK" if flag not desired
-
-	inline constexpr operator bool() const { return m_id & ID_FLAG_MASK; }
-	inline constexpr void set() { m_id = m_id | ID_FLAG_MASK; }
-	inline constexpr void unset() { m_id = m_id & ID_UNFLAG_MASK; }
-
-	inline constexpr bool operator==( const my_type& rhs ) const { return this->id() == rhs.id(); }
-	inline constexpr bool operator<( const my_type& rhs ) const { return this->id() < rhs.id(); }
 };
 
 static std::ostream& operator<< ( std::ostream& os, const EdgeID& id )
@@ -86,8 +86,9 @@ static std::ostream& operator<< ( std::ostream& os, const EdgeID& id )
 }
 
 // an undirected edge class
-struct Edge : public apegrunt::extend_comparison_operators
+class Edge : public apegrunt::extend_comparison_operators
 {
+public:
 	using id_t = EdgeID;
 	using node_id_t = typename id_t::node_id_t;
 	using real_t = double;
@@ -100,10 +101,7 @@ struct Edge : public apegrunt::extend_comparison_operators
 	inline constexpr Edge( const my_type& other ) : m_id( other.m_id ), m_w( other.m_w ) { }
 	inline constexpr Edge( my_type&& other ) : m_id( std::move(other.m_id) ), m_w( std::move(other.m_w) ) { }
 
-	inline constexpr my_type& operator=( const my_type& rhs ) { m_id = rhs.m_id; m_w = rhs.m_w; }
-
-	id_t m_id;
-	real_t m_w;
+	inline constexpr my_type& operator=( const my_type& rhs ) { m_id = rhs.m_id; m_w = rhs.m_w; return *this; }
 
 	inline constexpr id_t id() const { return m_id; }
 	inline constexpr typename id_t::node_id_t node1() const { return m_id.first(); }
@@ -115,11 +113,15 @@ struct Edge : public apegrunt::extend_comparison_operators
 
 	inline constexpr bool operator==( const my_type& rhs ) const { return m_id == rhs.m_id; }
 	inline constexpr bool operator<( const my_type& rhs ) const { return m_id < rhs.m_id; }
+
+private:
+	id_t m_id;
+	real_t m_w;
 };
 
 static std::ostream& operator<< ( std::ostream& os, const Edge& edge )
 {
-	os << edge.m_id << " " << edge.m_w;
+	os << edge.id() << " " << edge.weight();
 	return os;
 }
 
@@ -181,18 +183,25 @@ public:
 	inline void reserve( std::size_t n ) { m_edges.reserve(n); }
 	inline std::size_t size() const { return m_edges.size(); }
 
-	// sort edges in descending order of weight, or whatever you'd prefer
-	template< typename Compare=bool(const edge_t&, const edge_t&) >
-	inline void sort( Compare comp=[](const edge_t& a, const edge_t& b) { return (a.weight() == b.weight()) ? (a.id() > b.id()) : (a.weight() > b.weight()); } )
-	{
-		std::sort( this->begin(), this->end(), comp );
-	}
-
 	inline edge_itr_t begin() { using std::begin; return begin(m_edges); }
 	inline edge_itr_t end() { using std::end; return end(m_edges); }
 
 	inline edge_const_itr_t begin() const { using std::cbegin; return cbegin(m_edges); }
 	inline edge_const_itr_t end() const { using std::cend; return cend(m_edges); }
+
+	// Convenience functions
+
+	// Find edge in graph using binary search; caller should make sure that edges are sorted in ascending order of id() first,
+	// i.e. this->sort( []( const auto& a, const auto& b ) { return a.id() < b.id(); } )
+	inline edge_itr_t find( const edge_t& edge ) { return apegrunt::binary_search( this->begin(), this->end(), edge ); }
+	inline edge_const_itr_t find( const edge_t& edge ) const { return apegrunt::binary_search( this->begin(), this->end(), edge ); }
+
+	// sort edges in descending order of weight, or whatever you'd prefer
+	template< typename Compare=bool(const edge_t&, const edge_t&) >
+	inline void sort( Compare comp=[](const edge_t& a, const edge_t& b) { return (a.weight() == b.weight()) ? (a.id() < b.id()) : (a.weight() > b.weight()); } )
+	{
+		std::sort( this->begin(), this->end(), comp );
+	}
 
 private:
 	//node_storage_t m_nodes;
