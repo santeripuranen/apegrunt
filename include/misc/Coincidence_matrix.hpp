@@ -78,7 +78,6 @@ private:
 	real_t* const m_data;
 };
 
-
 // Construct a coincidence matrix (aka a crosstable)
 template< typename AccessOrder, std::size_t Size, typename RealT >
 class Weighted_coincidence_1Dblock_kernel
@@ -259,7 +258,7 @@ public:
 
 		return wcoincidence_kernel_t( m_data );
 	}
-
+/*
 	inline auto get_weighted_coincidence_1Dblock_kernel( std::size_t bn, std::size_t block_size )
 	{
 		using wcoincidence_kernel_t = Weighted_coincidence_1Dblock_kernel<AccessOrder,BlockSize,real_t>;
@@ -268,7 +267,7 @@ public:
 		real_t *const data = m_data+bn*block_size*N*N; // ..well, it depends on how the calling/called code maps the data, and..
 		return wcoincidence_kernel_t( data, block_size ); // ..should be reflected here, too
 	}
-
+*/
 	inline auto get_weighted_coincidence_2Dblock_kernel( std::size_t iblock_size, std::size_t jblock_size )
 	{
 		using wcoincidence_kernel_t = Weighted_coincidence_2Dblock_kernel<AccessOrder,BlockSize,real_t>;
@@ -280,7 +279,7 @@ private:
 	real_t* const m_data;
 	const std::size_t m_extent;
 };
-
+/*
 template< typename RealT >
 struct stateweight { std::size_t state; RealT weight; };
 
@@ -348,21 +347,6 @@ public:
 		{
 			wcoincidence_block_kernel.accumulate( blocks[i], block_weights[i] );
 		}
-// debug
-/*
-		std::cout.precision(3);
-		for( std::size_t j=0; j < jsize; ++j )
-		{
-			std::cout << "j=" << j;
-			for( std::size_t k=0; k < N*N; ++k )
-			{
-				std::cout << " " << *(dest+j*N*N+k);
-			}
-			std::cout << "\n";
-		}
-		std::cout << std::endl;
-*/
-// debug end
 	}
 
 private:
@@ -402,7 +386,7 @@ private:
 	}
 
 };
-
+*/
 template< typename StateT, typename RealT >
 class weighted_coincidence_2Dblock
 {
@@ -460,27 +444,6 @@ public:
 			const auto& block_indices = intersection.block_pairs[i];
 			wcoincidence_block_kernel.accumulate( iblocks[block_indices.first], jblocks[block_indices.second], intersection_weights[i] );
 		}
-// debug
-/*
-		std::cout.precision(3);
-		for( std::size_t i=0; i < isize; ++i )
-		{
-			std::cout << "i=" << i << "\n";
-			for( std::size_t j=0; j < jsize; ++j )
-			{
-				std::cout << "j=" << j;
-				for( std::size_t k=0; k < N*N; ++k )
-				{
-					std::cout << " " << *(dest+(i*jsize*N*N+j*N*N)+k);
-				}
-				std::cout << "\n";
-			}
-			std::cout << "\n";
-		}
-		//std::cout << std::endl;
-		exit(0);
-*/
-// debug end
 	}
 
 	inline void single( real_t* dest, std::size_t ipos, std::size_t jpos ) const
@@ -499,21 +462,17 @@ public:
 		const auto intersection = apegrunt::block_list_intersection( block_accounting[iblock], block_accounting[jblock] );
 		const auto intersection_weights = apegrunt::block_list_intersection_weights( intersection, *m_weights );
 
-		//const auto isize = ( iblock == m_last_block_index ? m_last_block_size : BlockSize );
-		//const auto jsize = ( jblock == m_last_block_index ? m_last_block_size : BlockSize );
-
 		Matrix_storage_view<MATRICES_AccessOrder_tag<N>,BlockSize,real_t> wcoincidence_matrix_storage( dest, N*N );
 		auto&& wcoincidence_block_kernel = wcoincidence_matrix_storage.get_weighted_coincidence_single_kernel();
-		//std::cout << " init=" << m_initialize_with; std::cout.flush();
 		wcoincidence_block_kernel.set(m_initialize_with);
 
-		//std::cout << " isect=" << intersection.size(); std::cout.flush();
+		const auto ipos_local = ipos%BlockSize;
+		const auto jpos_local = jpos%BlockSize;
 		for( std::size_t i=0; i < intersection.size(); ++i )
 		{
 			const auto& block_indices = intersection.block_pairs[i];
-			wcoincidence_block_kernel.accumulate( iblocks[block_indices.first][ipos%BlockSize], jblocks[block_indices.second][jpos%BlockSize], intersection_weights[i] );
+			wcoincidence_block_kernel.accumulate( iblocks[block_indices.first][ipos_local], jblocks[block_indices.second][jpos_local], intersection_weights[i] );
 		}
-		//std::cout << " done"; std::cout.flush();
 	}
 
 private:
