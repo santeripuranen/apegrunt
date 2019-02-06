@@ -396,7 +396,7 @@ private:
 
 };
 
-template<> template< typename StateT >
+template< typename StateT >
 class StateVector_mutator< StateVector_impl_block_compressed_alignment_storage< StateT > >
 {
 public:

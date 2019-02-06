@@ -31,13 +31,13 @@ class Array_view;
 template< typename T, std::size_t Extent >
 struct rank< Array_view<T, Extent> > : std::integral_constant< std::size_t, rank<T>::value+1 > { };
 
-template<> template< typename T, std::size_t Extent >
+template< typename T, std::size_t Extent >
 struct extent< Array_view<T, Extent>, 0 > : std::integral_constant< std::size_t, Extent > { };
 
-template<> template< typename T, std::size_t Extent, unsigned N >
+template< typename T, std::size_t Extent, unsigned N >
 struct extent< Array_view<T, Extent>, N > : std::integral_constant< std::size_t, extent<T,N-1>::value > { };
 
-template<> template< typename T, std::size_t Extent >
+template< typename T, std::size_t Extent >
 struct scalar_type< Array_view<T,Extent> > { using type = typename scalar_type<T>::type; };
 /*
 template<> template< typename T, std::size_t Extent >
@@ -48,7 +48,7 @@ struct recursive_extent< Array_view<T,Extent> > : std::integral_constant<
 	  extent< Array_view<T,Extent>, rank< Array_view<T,Extent> >::value-1 >::value
 > { };
 */
-template<> template< typename T, std::size_t Extent >
+template< typename T, std::size_t Extent >
 struct recursive_extent< Array_view<T,Extent> > : std::integral_constant<
   	  std::size_t,
 	  extent< Array_view<T,Extent> >::value

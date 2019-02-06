@@ -539,13 +539,13 @@ inline bool operator<=( const State_holder<StateT>& lhs, const StateT& rhs ) { r
 template< typename StateT >
 inline bool operator>=( const State_holder<StateT>& lhs, const StateT& rhs ) { return !(lhs < State_holder<StateT>(rhs) ); }
 
-template<> template< typename StateT >
+template< typename StateT >
 struct gap_state< State_holder<StateT> > { static constexpr StateT value = StateT::GAP; };
 
-template<> template<>
+template<>
 struct gap_state< State_holder<char> > { static constexpr char value = gap_state<char>::value; };
 
-template<> template<>
+template<>
 struct gap_state< State_holder<unsigned char> > { static constexpr unsigned char value = gap_state<unsigned char>::value; };
 
 } // namespace apegrunt
