@@ -303,25 +303,30 @@ struct alignas(32) State_block<StateT,32>
 	inline const state_t& operator[]( std::size_t pos ) const { return m_states[pos]; }
 
 	inline void clear() { this->store( _mm256_set1_epi8( char(gap_state<state_t>::value) ) ); }
-
 	inline bool operator==( const my_type& rhs ) const
 	{
-		return TRUE == _mm256_movemask_epi8( _mm256_cmpeq_epi8( this->load(), rhs() ) );
-		//return m_block[0] == rhs.m_block[0] && m_block[1] == rhs.m_block[1] && m_block[2] == rhs.m_block[2] && m_block[3] == rhs.m_block[3];
+#ifdef __AVX2__
+		return TRUE == _mm256_movemask_epi8( _mm256_cmpeq_epi8( this->load(), rhs() ) ); // both ops are AVX2
+#else
+		return m_block[0] == rhs.m_block[0] && m_block[1] == rhs.m_block[1] && m_block[2] == rhs.m_block[2] && m_block[3] == rhs.m_block[3];
+#endif // __AVX2__
 	}
 
 	inline bool operator<( const my_type& rhs ) const
 	{
-		return TRUE == _mm256_movemask_epi8( _mm256_cmplt_epi8( this->load(), rhs() ) );
-/*
+#ifdef __AVX2__
+		return TRUE == _mm256_movemask_epi8( _mm256_cmplt_epi8( this->load(), rhs() ) ); // both ops are AVX2
+#else
 		for( std::size_t i=0; i < N; ++i )
 		{
 			if( m_states[i] < rhs.m_states[i] ) { return true; }
 		}
 		return false;
-*/
+#endif // __AVX2__
 	}
 };
+
+#ifdef __AVX2__
 
 template< typename StateT >
 inline std::size_t count_identical( State_block<StateT,32> lhs, State_block<StateT,32> rhs )
@@ -329,6 +334,8 @@ inline std::size_t count_identical( State_block<StateT,32> lhs, State_block<Stat
 	// Intel's had popcnt since Nehalem, so should be fairly safe to use nowadays
 	return _mm_popcnt_u64( _mm256_movemask_epi8( _mm256_cmpeq_epi8( lhs(), rhs() ) ) );
 }
+
+#endif // __AVX2__
 
 /*
 template< typename StateT >
