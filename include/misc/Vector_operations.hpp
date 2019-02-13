@@ -249,9 +249,9 @@ inline double sum( const Vector<double,5,false>& v )
 }
 // */
 template< uint Exponent >
-inline constexpr __m256d pow( __m256d x ) { __m256d result = x; for( std::size_t i=1; i<Exponent; ++i ) { result = result * x; } return result; }
+inline __m256d pow( __m256d x ) { __m256d result = x; for( std::size_t i=1; i<Exponent; ++i ) { result = result * x; } return result; }
 template<>
-inline constexpr __m256d pow<2>( __m256d x ) { return x*x; }
+inline __m256d pow<2>( __m256d x ) { return x*x; }
 
 #endif // __AVX__
 
