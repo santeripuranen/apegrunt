@@ -28,23 +28,16 @@ set( CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib )
 set( CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin )
 
 # general optimization flags	
-set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -O3 -mavx -fabi-version=6 -static-libstdc++" )
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+   set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -O3 -mavx -static-libstdc++" )
+elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+   set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -O3 -mavx -fabi-version=6 -static-libstdc++" )
+endif()
 set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -ftree-vectorize -fwhole-program" )
 set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -flto -ffat-lto-objects" ) # -flto-report" )
 
-# unused optimization flags
-#set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -fdevirtualize" ) # there's nothing that we're able to devirtualize
-#set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -funroll-loops" ) # loop unrolling produces a bigger binary, but results in no perceivable effect on performance
-#set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -fdevirtualize-at-ltrans" ) # there's nothing that we're able to devirtualize
-#set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} --param max-inline-insns-auto=100" ) # no effect in this code base
-#set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} --param early-inlining-insns=200" ) # results in GCC "warning: relocation refers to discarded section", when linking against apegrunt
-#set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -fgraphite -floop-block -floop-nest-optimize -floop-interchange -floop-strip-mine" ) # no effect on performance; Graphite loop transformations require GCC compile with isl
-#set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -fprefetch-loop-arrays" ) # seems to make SuperDCA run slower
-
 # release build flags
 set( APEGRUNT_GCC_RELEASE_FLAGS "-w -DNDEBUG" )
-#set( APEGRUNT_GCC_RELEASE_FLAGS "${APEGRUNT_GCC_RELEASE_FLAGS} -fdata-sections -ffunction-sections -Wl,--gc-sections" )
-#set( APEGRUNT_GCC_RELEASE_FLAGS "${APEGRUNT_GCC_RELEASE_FLAGS} -fvisibility=hidden -fvisibility-inlines-hidden -Wl,--strip-all" )
 set( CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall ${APEGRUNT_GCC_OPTIMIZATION_FLAGS} ${APEGRUNT_GCC_RELEASE_FLAGS}")
 
 # debug build flags
