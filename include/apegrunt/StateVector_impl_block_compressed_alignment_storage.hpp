@@ -280,7 +280,8 @@ private:
 	using iterator_impl = apegrunt::iterator::StateVector_iterator_impl_block_compressed_alignment_storage< State_holder<state_t>, StateVector_impl_block_compressed_alignment_storage<state_t> >;
 	using const_iterator_impl = apegrunt::iterator::StateVector_iterator_impl_block_compressed_alignment_storage< State_holder<state_t>, StateVector_impl_block_compressed_alignment_storage<state_t> >;
 
-	template< state_t > friend class apegrunt::iterator::StateVector_iterator_impl_block_compressed_alignment_storage;
+	friend iterator_impl;
+	friend const_iterator_impl;
 
 	Block_Storage_ptr m_block_storage;
 	block_index_container_t m_block_indices;
