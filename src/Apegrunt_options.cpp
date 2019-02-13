@@ -323,7 +323,6 @@ bool Apegrunt_options_base::CheckOptions( boost::program_options::variables_map 
 			*s_out << s_title_string << "\n" << s_usage_string << s_options_string << std::endl;
 			exit(EXIT_SUCCESS);;
 		}
-#endif // APEGRUNT_STANDALONE_BUILD
 		if( !varmap->count("alignmentfile") && s_err )
 		{
 			*s_err << "apegrunt ERROR: No alignment file specified!" << std::endl;
@@ -333,7 +332,7 @@ bool Apegrunt_options_base::CheckOptions( boost::program_options::variables_map 
 			}
 			return false;
 		}
-
+#endif // APEGRUNT_STANDALONE_BUILD
     }
 	catch( std::exception& e)
 	{
