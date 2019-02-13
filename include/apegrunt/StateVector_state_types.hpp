@@ -106,7 +106,7 @@ nucleic_acid_base_complement.add
 template<> struct number_of_states<nucleic_acid_state_t> { enum { N=5, value=5 }; };
 
 template<>
-constexpr nucleic_acid_state_t char_to_state<nucleic_acid_state_t>( char nucleotide )
+nucleic_acid_state_t char_to_state<nucleic_acid_state_t>( char nucleotide )
 {
 	using state_t = nucleic_acid_state_t;
 	switch( std::tolower(nucleotide) )
@@ -120,7 +120,7 @@ constexpr nucleic_acid_state_t char_to_state<nucleic_acid_state_t>( char nucleot
 }
 
 template<>
-constexpr nucleic_acid_state_t to_state<char,nucleic_acid_state_t>( char nucleotide )
+nucleic_acid_state_t to_state<char,nucleic_acid_state_t>( char nucleotide )
 {
 	return char_to_state<nucleic_acid_state_t>(nucleotide);
 }
@@ -206,7 +206,7 @@ const std::string state_name<triallelic_state_t>::value = "triallelic_state_t";
 template<> struct number_of_states<triallelic_state_t> { enum { N=4, value=4 }; };
 
 template<>
-constexpr triallelic_state_t char_to_state<triallelic_state_t>( char nucleotide )
+triallelic_state_t char_to_state<triallelic_state_t>( char nucleotide )
 {
 	using state_t = triallelic_state_t;
 	switch( std::tolower(nucleotide) )
@@ -219,13 +219,13 @@ constexpr triallelic_state_t char_to_state<triallelic_state_t>( char nucleotide 
 }
 
 template<>
-constexpr triallelic_state_t to_state<nucleic_acid_state_t,triallelic_state_t>( nucleic_acid_state_t symbol )
+triallelic_state_t to_state<nucleic_acid_state_t,triallelic_state_t>( nucleic_acid_state_t symbol )
 {
 	return char_to_state<triallelic_state_t>(to_char(symbol));
 }
 
 template<>
-constexpr triallelic_state_t to_state<char,triallelic_state_t>( char symbol )
+triallelic_state_t to_state<char,triallelic_state_t>( char symbol )
 {
 	return char_to_state<triallelic_state_t>(symbol);
 }
@@ -262,7 +262,7 @@ enum struct tetraallelic_state_t : uint8_t
 template<> struct number_of_states<tetraallelic_state_t> { enum { N=4, value=4 }; };
 
 template<>
-constexpr tetraallelic_state_t char_to_state<tetraallelic_state_t>( char symbol )
+tetraallelic_state_t char_to_state<tetraallelic_state_t>( char symbol )
 {
 	using state_t = tetraallelic_state_t;
 	switch( std::tolower(symbol) )
@@ -275,7 +275,7 @@ constexpr tetraallelic_state_t char_to_state<tetraallelic_state_t>( char symbol 
 }
 
 template<>
-constexpr tetraallelic_state_t to_state<char,tetraallelic_state_t>( char symbol )
+tetraallelic_state_t to_state<char,tetraallelic_state_t>( char symbol )
 {
 	return char_to_state<tetraallelic_state_t>(symbol);
 }
@@ -321,7 +321,7 @@ enum struct pentaallelic_state_t : uint8_t
 template<> struct number_of_states<pentaallelic_state_t> { enum { N=5, value=5 }; };
 
 template<>
-constexpr pentaallelic_state_t char_to_state<pentaallelic_state_t>( char symbol )
+pentaallelic_state_t char_to_state<pentaallelic_state_t>( char symbol )
 {
 	using state_t = pentaallelic_state_t;
 	switch( std::tolower(symbol) )
@@ -335,7 +335,7 @@ constexpr pentaallelic_state_t char_to_state<pentaallelic_state_t>( char symbol 
 }
 
 template<>
-constexpr pentaallelic_state_t to_state<char,pentaallelic_state_t>( char symbol )
+pentaallelic_state_t to_state<char,pentaallelic_state_t>( char symbol )
 {
 	return char_to_state<pentaallelic_state_t>(symbol);
 }
