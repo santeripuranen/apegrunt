@@ -39,7 +39,11 @@ if( APEGRUNT_LIBRARY_SOURCES )
 endif()
 
 # general optimization flags	
-set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -O3 -mavx -funroll-loops -fabi-version=6 --param max-inline-insns-auto=100 --param early-inlining-insns=200 -flto -ffat-lto-objects" )
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+   set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -O3 -mavx -static-libstdc++" )
+elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+   set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -O3 -mavx -fabi-version=6 -static-libstdc++" )
+endif()
 set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -fdata-sections -ffunction-sections -Wl,--gc-sections" )
 set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -fvisibility=hidden -fvisibility-inlines-hidden" )
 set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS} -fwhole-program" )
