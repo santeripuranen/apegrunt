@@ -49,39 +49,6 @@ std::ostream& operator<< ( std::ostream& os, const std::array< std::array<RealT,
 	return os;
 }
 
-template< typename RealT, std::size_t N, typename ...Args >
-boost::accumulators::accumulator_set< RealT, Args... >& operator<< ( boost::accumulators::accumulator_set< RealT, Args... >& acc, const std::array< std::array<RealT,N>, N >& a )
-{
-	for( std::size_t i = 0; i < N; ++i )
-	{
-		for( std::size_t j = 0; j < N; ++j )
-		{
-			acc( a[i][j] );
-		}
-	}
-	return acc;
-}
-
-template< typename RealT, std::size_t N, typename ...Args >
-boost::accumulators::accumulator_set< RealT, Args... >& operator<< ( boost::accumulators::accumulator_set< RealT, Args... >& acc, const std::array< RealT, N >& a )
-{
-	for( std::size_t i = 0; i < N; ++i )
-	{
-		if( 0.0 != a[i] ) { acc( a[i] ); } // this might not be a good thing in general
-	}
-	return acc;
-}
-
-template< typename RealT, std::size_t N, typename ...Args >
-boost::accumulators::accumulator_set< RealT, Args... >& operator<< ( boost::accumulators::accumulator_set< RealT, Args... >& acc, const std::vector< std::array<RealT,N> >& v )
-{
-	for( const auto& a: v )
-	{
-		acc << a;
-	}
-	return acc;
-}
-
 template< typename RealT, std::size_t N >
 std::array< std::array<RealT,N>, N > repmat( const std::array<RealT,N>& a, bool is_column_vector=false )
 {

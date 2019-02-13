@@ -1,6 +1,6 @@
 # Version $Id: $
 
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.3)
 
 # Disable in-source builds to prevent source tree corruption
 include( cmake/disable_insource_builds.cmake NO_POLICY_SCOPE )
@@ -13,10 +13,12 @@ set( CMAKE_C_COMPILER $ENV{CMAKE_C_COMPILER} )
 project( APEGRUNT )
 set( ${PROJECT_NAME}_INCLUDE_DIR ${${PROJECT_NAME}_SOURCE_DIR}/include CACHE INTERNAL "Apegrunt include dir" )
 
-include( cmake/apegrunt_options.cmake NO_POLICY_SCOPE )
+include( cmake/Apegrunt_options.cmake NO_POLICY_SCOPE )
 include( cmake/git_commit_info.cmake NO_POLICY_SCOPE )
+include( cmake/set_default_build_type.cmake NO_POLICY_SCOPE )
 
+add_subdirectory( externals )
 add_subdirectory( src )
 #add_subdirectory( test )
 
-set( APEGRUNT_FOUND true CACHE INTERNAL "Apegrunt found, if true" )
+set( ${PROJECT_NAME}_FOUND true CACHE INTERNAL "Apegrunt found, if true" )

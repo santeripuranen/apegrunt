@@ -30,6 +30,7 @@
 #include <type_traits> // std::true_type
 
 #include "Apegrunt_utility.hpp"
+#include "Apegrunt_IO_misc.hpp"
 #include "Threshold_rule.hpp"
 
 #include "Alignment_forward.h"
@@ -42,14 +43,18 @@
 #include "Loci_parsers.hpp"
 #include "State_block.hpp"
 
+#include "ValueVector_parser.hpp"
+
 #include "aligned_allocator.hpp"
 
+#include "accumulators/distribution.hpp"
 #include "accumulators/distribution_std.hpp"
 #include "accumulators/distribution_bincount.hpp"
 #include "accumulators/distribution_ordered.hpp"
 #include "accumulators/distribution_cumulative.hpp"
 //#include "accumulators/distribution_generator_svg.hpp"
 #include "accumulators/distribution_generator_csv.hpp"
+#include "accumulators/accumulators_utility.hpp"
 
 #include "misc/Stopwatch.hpp"
 
@@ -237,16 +242,39 @@ void cache_sample_weights( Alignment_ptr<StateT> alignment )
 			cputimer.print_timing_stats(); *Apegrunt_options::get_out_stream() << "\n";
 		}
 	}
+}
+
+template< typename StateT, typename RealT=double >
+void output_sample_weights( Alignment_ptr<StateT> alignment )
+{
 	// output weights
 	if( Apegrunt_options::output_sample_weights() )
 	{
+		// init timer
+		stopwatch::stopwatch cputimer( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
+
 		// output weights
 		auto weights_file = get_unique_ofstream( alignment->id_string()+"."+apegrunt::size_string(alignment)+".weights" );
 		auto& weights_stream = *weights_file->stream();
 		weights_stream << std::scientific;
 		weights_stream.precision(8);
-		auto weights = apegrunt::get_weights( alignment );
-		for( auto w: weights ) { weights_stream << w << "\n"; }
+
+		//auto weights = apegrunt::get_weights( alignment );
+
+		if( Apegrunt_options::verbose() )
+		{
+			*Apegrunt_options::get_out_stream() << "apegrunt: write sample weights to file \"" << alignment->effective_size() << "\"\n";
+			Apegrunt_options::get_out_stream()->flush();
+		}
+		cputimer.start();
+		for( auto sequence: alignment ) { weights_stream << sequence->weight() << "\n"; }
+		weights_stream.close();
+		cputimer.stop();
+		if( Apegrunt_options::verbose() )
+		{
+			cputimer.print_timing_stats();
+			*Apegrunt_options::get_out_stream() << "\n";
+		}
 	}
 }
 

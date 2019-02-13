@@ -43,15 +43,26 @@ public:
 	virtual ~Apegrunt_options_base();
 
 	void AddOptions( po::options_description *opdesc );
+#ifdef APEGRUNT_STANDALONE_BUILD
+	void AddOptions_standalone( po::options_description *opdesc );
+#endif // APEGRUNT_STANDALONE_BUILD
 	static bool CheckOptions( po::variables_map *varmap );
 	static const std::string& s_get_copyright_notice_string();
-#ifdef APEGRUNT_STANDALONE_BUILD
+
+	// Apegrunt standalone binary options
 	static const std::string& s_get_usage_string();
-#endif // APEGRUNT_STANDALONE_BUILD
+
 	static const std::string& s_get_version_string();
 	static const std::string& s_get_title_string();
 
-	uint state() const;
+	//> Test if textual output is desired. If true, then a call to get_out_stream() is guaranteed to return a valid (as in != null_ptr) ostream*.
+	static bool verbose();
+	static void set_verbose( bool value );
+
+#ifdef APEGRUNT_STANDALONE_BUILD
+	static const std::string& get_options_string();
+	static void set_options_string( const std::string& options_string );
+#endif // APEGRUNT_STANDALONE_BUILD
 
 	//> Set an ostream. An invalid ostream* (as in "out->good() == false", will reset internal ostream ("ostream* == null_ptr").
 	static void set_out_stream( std::ostream* out );
@@ -59,6 +70,8 @@ public:
 	static std::ostream* get_out_stream();
 	static std::ostream* get_err_stream();
 
+	// Alignment IO options
+	// Input
 	static bool has_alignment_filenames();
 	static const std::vector< std::string >& get_alignment_filenames();
 
@@ -74,44 +87,34 @@ public:
 	static bool has_samplelist_filename();
 	static const std::string& get_samplelist_filename();
 
-	static double get_minor_allele_frequency_threshold();
-	static double get_gap_frequency_threshold();
-	static Threshold_rule<int> get_allele_state_rule();
-
-	// alignment processing
-	static bool fuse_duplicates();
-	static bool filter_alignment();
-	static bool output_state_frequencies();
-	static bool optimize_column_order(); // not used at the moment
-	static int sample_alignment();
-	static const std::vector<double>& sample_fractions();
-	static double sample_reweighting_threshold();
-	static bool output_sample_weights();
-	static bool reweight_samples();
-
 	static bool has_sample_weights_filename();
 	static const std::string& get_sample_weights_filename();
 
-	static bool rescale_sample_weights();
+	static std::size_t get_input_indexing_base();
+	static void set_input_indexing_base( std::size_t base_index );
+
+	// Output control
+	static bool output_state_frequencies();
+	static bool output_sample_weights();
 	static bool output_sample_distance_matrix();
+
+	// Alignment processing
+	static bool filter_alignment();
+	static bool reweight_samples();
+	static bool rescale_sample_weights();
+	static int sample_alignment();
+
+	static double get_minor_allele_frequency_threshold();
+	static double get_gap_frequency_threshold();
+	static Threshold_rule<int> get_allele_state_rule();
+	static double sample_reweighting_threshold();
+	static const std::vector<double>& sample_fractions();
 
 	static std::size_t genome_size();
 	static bool linear_genome();
-	static bool variable_penalty(); // not used at the moment
-	static std::size_t distance_penalty_threshold(); // not used at the moment
-	static double distance_penalty_shape(); // not used at the moment
-	static double distance_penalty_scaling(); // not used at the moment
-
-	//> Test if textual output is desired. If true, then a call to get_out_stream() is guaranteed to return a valid (as in != null_ptr) ostream*.
-	static bool verbose();
-	static void set_verbose( bool verbose=true );
 
 	static std::size_t get_output_indexing_base();
 	static void set_output_indexing_base( std::size_t base_index );
-	static std::size_t get_input_indexing_base();
-	static void set_input_indexing_base( std::size_t base_index );
-	static int get_begin_locus();
-	static int get_end_locus();
 
 	static bool cuda();
 	static void set_cuda( bool use_cuda=true );
@@ -119,12 +122,19 @@ public:
 	static int threads();
 	static void set_threads( int nthreads );
 
+	// Unused options
+	static bool fuse_duplicates(); // functionality unused at the moment
+	static bool optimize_column_order(); // not used at the moment
+
+	static bool variable_penalty(); // not used at the moment
+	static std::size_t distance_penalty_threshold(); // not used at the moment
+	static double distance_penalty_shape(); // not used at the moment
+	static double distance_penalty_scaling(); // not used at the moment
+
+	static int get_begin_locus();
+	static int get_end_locus();
+
 private:
-// all the member variables
-
-	//static uint s_state; // 1 for normal operation, 0 signals a wish to (gracefully) terminate process
-	static bool s_verbose;
-
 	static std::vector< std::string > s_alignment_file_names;
 	static std::string s_includelist_file_name;
 	static std::string s_excludelist_file_name;
@@ -165,15 +175,14 @@ private:
 	static int s_threads;
 	static int s_nodes;
 	static bool s_use_cuda;
+	static bool s_verbose;
 
 	static const std::string s_title_string;
-#ifdef APEGRUNT_STANDALONE_BUILD
-	static const std::string s_usage_string;
-#endif // APEGRUNT_STANDALONE_BUILD
 	static const std::string s_version_string;
 	static const std::string s_copyright_notice;
 	static const std::string s_long_copyright_notice;
 	static std::string s_options_string;
+	static const std::string s_usage_string;
 	void m_init();
 
 	static void s_init_verbose( bool verbose );
@@ -209,9 +218,11 @@ private:
 
 	po::options_description
 #ifdef APEGRUNT_STANDALONE_BUILD
-		m_general_options /*("apegrunt general options")*/,
-		m_parallel_options /*("apegrunt parallel options")*/,
+		// Apegrunt standalone binary options
+		m_standalone_options /*("apegrunt executable options")*/,
 #endif // APEGRUNT_STANDALONE_BUILD
+
+		// Apegrunt library options
 		m_alignment_options /*("apegrunt alignment preprocessing options")*/,
 		m_algorithm_options /*("apegrunt algorithm options")*/
 	;

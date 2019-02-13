@@ -31,6 +31,7 @@
 //#include <boost/filesystem/operations.hpp> // includes boost/filesystem/path.hpp
 
 #include "Alignment_forward.h"
+#include "Alignment_interface.hpp"
 //#include "Alignment_generator_FASTA_grammar.hpp"
 
 namespace apegrunt {
@@ -78,6 +79,93 @@ bool generate_PhandangoCSV( Alignment_ptr<StateT> alignment, std::ostream* outst
 			*outstream << ",\"" << *(begin(sequence)) << "\"";
 			*outstream << "\n";
 		}
+		return true;
+	}
+	return false;
+}
+
+template< typename StateT >
+bool generate_AG_Alignment( apegrunt::Alignment_ptr<StateT> alignment, std::ostream* outstream )
+{
+// this is temporary file output code, used until we have a proper generator implementation.
+	if( outstream && outstream->good() )
+	{
+		*outstream << "<alignment id=\"" << alignment->id_string() << "\">" << "\n";
+		*outstream << "<instances>";
+		std::hash<std::string> seqid_hasher;
+		std::size_t sid=0;
+		for( const auto& sequence: alignment )
+		{
+			*outstream << "<i id=\"" << sid /*seqid_hasher( sequence->id_string() )*/ << "\" w=\"" << sequence->weight() << "\">"
+					<< sequence->id_string()
+					<< "</i>"
+			;
+			++sid;
+		}
+		*outstream << "</samples>" << "\n";
+
+		//const auto& alignment = *(alignment.get());
+		const auto& blocks = *(alignment->get_block_storage());
+		const auto& block_accounting = *(alignment->get_block_accounting());
+		const auto& index_translation = *(alignment->get_loci_translation());
+		const std::size_t base_index = apegrunt::Apegrunt_options::get_output_indexing_base();
+
+		const auto n_loci = alignment->n_loci();
+		const auto number_of_blocks = apegrunt::get_number_of_blocks(n_loci);
+		const auto last_block_size = apegrunt::get_last_block_size(n_loci);
+		const auto last_block_index = apegrunt::get_last_block_index(n_loci);
+
+		*outstream << "<data>";
+		for( std::size_t i=0; i < number_of_blocks; ++i )
+		{
+			const auto sidxend = i == last_block_index ? last_block_size : apegrunt::StateBlock_size;
+			{ // the block 'header'
+				*outstream << "<blocks p=\""; // p=positions
+				std::size_t oldidx = 0, begidx = 0;
+				*outstream << std::hex << index_translation[i*apegrunt::StateBlock_size]+base_index;
+				for( std::size_t sidx=1; sidx < sidxend; ++sidx )
+				{
+					if( index_translation[i*apegrunt::StateBlock_size+sidx]+base_index > index_translation[i*apegrunt::StateBlock_size+oldidx]+base_index+1 )
+					{
+						if( oldidx != begidx )
+						{
+							*outstream << "-" << index_translation[i*apegrunt::StateBlock_size+oldidx]+base_index;
+						}
+						*outstream << "," << index_translation[i*apegrunt::StateBlock_size+sidx]+base_index;
+						begidx = sidx;
+					}
+					oldidx = sidx;
+				}
+				*outstream << std::dec << "\">";
+			}
+			{ // the block 'payload'
+				for( std::size_t nblock=0; nblock < block_accounting[i].size(); ++nblock )
+				{
+					*outstream << "<block i=\""; // i=instances
+					const auto& indices = block_accounting[i][nblock];
+					std::size_t oldpos = 0, begpos = 0;
+					*outstream << std::hex << indices[oldpos];
+					for( std::size_t pos=1; pos < indices.size(); ++pos )
+					{
+						if( indices[pos] > indices[oldpos]+1 )
+						{
+							if( oldpos != begpos )
+							{
+								*outstream << "-" << indices[oldpos];
+							}
+							*outstream << "," << indices[pos];
+							begpos = pos;
+						}
+						oldpos = pos;
+					}
+					*outstream << std::dec << "\">";
+					*outstream << blocks[i][nblock] << "</block>";
+				}
+				*outstream << "</blocks>" << "\n";
+			}
+		}
+		*outstream << "</data>" << "\n";
+		*outstream << "</alignment>" << "\n";
 		return true;
 	}
 	return false;

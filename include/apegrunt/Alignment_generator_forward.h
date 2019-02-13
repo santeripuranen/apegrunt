@@ -43,10 +43,10 @@ template< typename IteratorT, typename AlignmentT > struct Alignment_generator_F
 
 #ifdef USE_BOOST_SPIRIT_X3
 #define ALIGNMENT_GENERATOR_GRAMMAR_FRIENDS(Alignment_type) \
-	template< IteratorT > friend class apegrunt::generators::Alignment_generator_grammar::parse;
+	template< typename IteratorT, typename Alignment_type > friend class apegrunt::generators::Alignment_generator_grammar::parse;
 #else
 #define ALIGNMENT_GENERATOR_GRAMMAR_FRIENDS(Alignment_type) \
-	template< typename IteratorT > friend class apegrunt::generators::Alignment_generator_FASTA_grammar;
+	template< typename IteratorT, typename Alignment_type > friend class apegrunt::generators::Alignment_generator_FASTA_grammar;
 #endif // #ifdef USE_BOOST_SPIRIT_X3
 
 } // namespace apegrunt

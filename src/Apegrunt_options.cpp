@@ -1,6 +1,6 @@
 /** @file Apegrunt_options.cpp
 
-	Copyright (c) 2016-2017 Santeri Puranen.
+	Copyright (c) 2016-2019 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -27,7 +27,6 @@ namespace apegrunt {
 std::ostream* Apegrunt_options_base::s_out = nullptr;
 std::ostream* Apegrunt_options_base::s_err = nullptr;
 
-//uint Apegrunt_options_base::s_state = 1;
 bool Apegrunt_options_base::s_verbose = false;
 
 std::size_t Apegrunt_options_base::s_output_indexing_base = 1;
@@ -58,16 +57,19 @@ bool Apegrunt_options_base::s_use_cuda = false;
 #endif
 
 #ifdef APEGRUNT_STANDALONE_BUILD
+// Apegrunt standalone binary options
 std::string Apegrunt_options_base::s_options_string;
 
 const std::string Apegrunt_options_base::s_usage_string(
 	  std::string("Usage: apegrunt") /*+ std::string(argv[0])*/ + " [options] <alignmentfile> [-o <outputfile>]\nOption '--help' will print a list of available options.\n"
 );
-#endif // APEGRUNT_STANDALONE_BUILD
+const std::string& Apegrunt_options_base::s_get_usage_string() { return s_usage_string; }
+// End Apegrunt standalone binary options
 
 const std::string Apegrunt_options_base::s_title_string(
 	  std::string("Apegrunt: A library for parsing, processing and storing alignments of categorical variables.\n")
 );
+#endif // APEGRUNT_STANDALONE_BUILD
 
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
@@ -88,12 +90,12 @@ const std::string Apegrunt_options_base::s_version_string(
 );
 
 const std::string Apegrunt_options_base::s_copyright_notice(
-	std::string("Copyright (c) 2016-2018 Santeri Puranen\nLicensed under the GNU Affero General Public License version 3.\n\n")
+	std::string("Copyright (c) 2016-2019 Santeri Puranen\nLicensed under the GNU Affero General Public License version 3.\n\n")
 	+ "THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND."
 );
 
 const std::string Apegrunt_options_base::s_long_copyright_notice(
-	std::string("Copyright (c) 2016-2017 Santeri Puranen\nLicensed under the GNU Affero General Public License version 3.\n\n")
+	std::string("Copyright (c) 2016-2019 Santeri Puranen\nLicensed under the GNU Affero General Public License version 3.\n\n")
 	+ "This program is free software: you can redistribute it and/or modify\n"
 	+ "it under the terms of the GNU Affero General Public License version 3 as\n"
 	+ "published by the Free Software Foundation.\n\n"
@@ -150,13 +152,10 @@ Apegrunt_options_base::Apegrunt_options_base( std::ostream *out, std::ostream *e
 }
 
 const std::string& Apegrunt_options_base::s_get_copyright_notice_string() { return s_copyright_notice; }
-#ifdef APEGRUNT_STANDALONE_BUILD
-const std::string& Apegrunt_options_base::s_get_usage_string() { return s_usage_string; }
-#endif // APEGRUNT_STANDALONE_BUILD
 const std::string& Apegrunt_options_base::s_get_version_string() { return s_version_string; }
+#ifdef APEGRUNT_STANDALONE_BUILD
 const std::string& Apegrunt_options_base::s_get_title_string() { return s_title_string; }
-
-//uint Apegrunt_options_base::state() const { return s_state; }
+#endif // APEGRUNT_STANDALONE_BUILD
 
 void Apegrunt_options_base::set_out_stream( std::ostream *out ) { s_out = out->good() ? out : nullptr; }
 void Apegrunt_options_base::set_err_stream( std::ostream *err ) { s_err = err->good() ? err : nullptr; }
@@ -166,6 +165,11 @@ std::ostream* Apegrunt_options_base::get_err_stream() { return s_err; }
 
 bool Apegrunt_options_base::verbose() { return ( s_verbose && s_out ); } // be verbose only if we have a valid ostream*.
 void Apegrunt_options_base::set_verbose( bool verbose ) { s_verbose = verbose; }
+
+#ifdef APEGRUNT_STANDALONE_BUILD
+const std::string& Apegrunt_options_base::get_options_string() { return s_options_string; }
+void Apegrunt_options_base::set_options_string( const std::string& options_string ) { s_options_string = options_string; }
+#endif // APEGRUNT_STANDALONE_BUILD
 
 // alignment processing
 bool Apegrunt_options_base::has_alignment_filenames() { return !s_alignment_file_names.empty(); }
@@ -232,13 +236,15 @@ void Apegrunt_options_base::set_threads( int nthreads ) { } // do nothing
 void Apegrunt_options_base::m_init()
 {
 	namespace po = boost::program_options;
-
 #ifdef APEGRUNT_STANDALONE_BUILD
-m_general_options.add_options()
+	m_standalone_options.add_options()
+		("help,h", "Print this help message.")
+		("version", "Print version information.")
+		("verbose,v", po::bool_switch( &Apegrunt_options::s_verbose )->default_value(Apegrunt_options::s_verbose)->notifier(Apegrunt_options::s_init_verbose), "Be verbose.")
+/*
 		("outfile", po::value< std::string >( &Apegrunt_options_base::s_outfile_name )->default_value(Apegrunt_options_base::s_outfile_name), "Log filename.")
 		("errfile", po::value< std::string >( &Apegrunt_options_base::s_errfile_name )->default_value(Apegrunt_options_base::s_errfile_name), "Error log filename.")
-	;
-	m_parallel_options.add_options()
+*/
 #ifndef APEGRUNT_NO_TBB // Threading with Threading Building Blocks
 		("threads,t", po::value< int >( &Apegrunt_options_base::s_threads )->default_value(Apegrunt_options_base::s_threads)->notifier(Apegrunt_options_base::s_init_threads), "Number of threads per shared memory node (-1=use all hardware threads that the OS/environment exposes).")
 #endif // APEGRUNT_NO_TBB
@@ -249,27 +255,32 @@ m_general_options.add_options()
 #endif // APEGRUNT_STANDALONE_BUILD
 
 	m_alignment_options.add_options()
+		// Input options
 		("alignmentfile", po::value< std::vector< std::string > >( &Apegrunt_options_base::s_alignment_file_names )->composing(), "The input alignment filename(s). When two filenames are specified, only inter-alignment links will be probed for.")
 		("include-list", po::value< std::string >( &Apegrunt_options_base::s_includelist_file_name ), "Name of file containing list of loci to include in analysis.")
 		("exclude-list", po::value< std::string >( &Apegrunt_options_base::s_excludelist_file_name ), "Name of file containing list of loci to exclude from analysis.")
 		("mapping-list", po::value< std::string >( &Apegrunt_options_base::s_mappinglist_file_name ), "Name of file containing loci mappings.")
 		("sample-list", po::value< std::string >( &Apegrunt_options_base::s_samplelist_file_name ), "The sample filter list input filename.")
+		("sample-weights",  po::value< std::string >( &Apegrunt_options_base::s_sample_weights_file_name ), "Name of file containing sample weights.")
+		("input-indexing-base", po::value< std::size_t >( &Apegrunt_options_base::s_input_indexing_base )->default_value(Apegrunt_options_base::s_input_indexing_base)->notifier(Apegrunt_options_base::s_init_input_indexing_base), "Base index for input." )
 
-		("no-filter-alignment", po::bool_switch( &Apegrunt_options_base::s_no_filter_alignment )->default_value(Apegrunt_options_base::s_no_filter_alignment)->notifier(Apegrunt_options_base::s_init_no_filter_alignment), "Do not reduce the number of apegrunt input loci by applying MAF and GAP thresholds.")
+		// Alignment processing control
+		("no-filter-alignment", po::bool_switch( &Apegrunt_options_base::s_no_filter_alignment )->default_value(Apegrunt_options_base::s_no_filter_alignment)->notifier(Apegrunt_options_base::s_init_no_filter_alignment), "Do not filter alignment columns by applying MAF and GAP thresholds.")
 		("maf-threshold", po::value< double >( &Apegrunt_options_base::s_minor_allele_frequency_threshold )->default_value(Apegrunt_options_base::s_minor_allele_frequency_threshold)->notifier(Apegrunt_options_base::s_init_minor_allele_frequency_threshold), "Minor state frequency threshold. Loci with less than 2 states above threshold are removed from alignment.")
 		("gap-threshold", po::value< double >( &Apegrunt_options_base::s_gap_frequency_threshold )->default_value(Apegrunt_options_base::s_gap_frequency_threshold)->notifier(Apegrunt_options_base::s_init_gap_frequency_threshold), "Gap frequency threshold. Positions with a gap frequency above the threshold are excluded from the pair-analysis.")
 
 //		("allele-state-rule", po::value< std::string >()/*->default_value( Apegrunt_options_base::s_allele_state_rule.str() )*/->notifier(Apegrunt_options_base::s_init_allele_state_rule), "Allele state filtering rule.")
-		("output-state-frequencies", po::bool_switch( &Apegrunt_options_base::s_output_state_frequencies )->default_value(Apegrunt_options_base::s_output_state_frequencies)->notifier(Apegrunt_options_base::s_init_output_state_frequencies), "Write column-wise state frequencies to file.")
-
-		("sample-alignment", po::value< int >( &Apegrunt_options_base::s_sample_alignment )->default_value(Apegrunt_options_base::s_sample_alignment)->notifier(Apegrunt_options_base::s_init_sample_alignment), "If >0 choose a random subset of samples. The number indicates sample count.")
+//		("sample-alignment", po::value< int >( &Apegrunt_options_base::s_sample_alignment )->default_value(Apegrunt_options_base::s_sample_alignment)->notifier(Apegrunt_options_base::s_init_sample_alignment), "If >0 choose a random subset of samples. The number indicates sample count.")
 
 		("no-sample-reweighting", po::bool_switch( &Apegrunt_options_base::s_no_sample_reweighting )->default_value(Apegrunt_options_base::s_no_sample_reweighting)->notifier(Apegrunt_options_base::s_init_no_sample_reweighting), "Turn sample reweighting off, i.e. do not try to correct for population structure.")
 		("sample-reweighting-threshold", po::value< double >( &Apegrunt_options_base::s_sample_reweighting_threshold )->default_value(Apegrunt_options_base::s_sample_reweighting_threshold)->notifier(Apegrunt_options_base::s_init_sample_reweighting_threshold), "Fraction of identical positions required for two samples to be considered identical.")
 		("rescale-sample-weights", po::bool_switch( &Apegrunt_options_base::s_rescale_sample_weights )->default_value(Apegrunt_options_base::s_rescale_sample_weights)->notifier(Apegrunt_options_base::s_init_rescale_sample_weights), "Rescale sample weights so that n(effective) == n.")
-		("sample-weights",  po::value< std::string >( &Apegrunt_options_base::s_sample_weights_file_name ), "Name of file containing sample weights.")
+
+		// Output options
+		("output-state-frequencies", po::bool_switch( &Apegrunt_options_base::s_output_state_frequencies )->default_value(Apegrunt_options_base::s_output_state_frequencies)->notifier(Apegrunt_options_base::s_init_output_state_frequencies), "Write column-wise state frequencies to file.")
 		("output-sample-weights", po::bool_switch( &Apegrunt_options_base::s_output_sample_weights )->default_value(Apegrunt_options_base::s_output_sample_weights)->notifier(Apegrunt_options_base::s_init_output_sample_weights), "Output sample weights.")
 		("output-sample-distance-matrix", po::bool_switch( &Apegrunt_options_base::s_output_sample_distance_matrix )->default_value(Apegrunt_options_base::s_output_sample_distance_matrix)->notifier(Apegrunt_options_base::s_init_output_sample_distance_matrix), "Output triangular sample-sample Hamming distance matrix.")
+		("output-indexing-base", po::value< std::size_t >( &Apegrunt_options_base::s_output_indexing_base )->default_value(Apegrunt_options_base::s_output_indexing_base)->notifier(Apegrunt_options_base::s_init_output_indexing_base), "Base index for output." )
 
 		("genome-size", po::value< std::size_t >( &Apegrunt_options_base::s_genome_size )->notifier(Apegrunt_options_base::s_init_genome_size), "Genome size, if different from input. Default = 0: detect size from input.")
 		("linear-genome", po::bool_switch( &Apegrunt_options_base::s_linear_genome )->default_value(Apegrunt_options_base::s_linear_genome)->notifier(Apegrunt_options_base::s_init_linear_genome), "Assume linear genome in distance calculations.")
@@ -278,8 +289,6 @@ m_general_options.add_options()
 //		("distance-penalty-shape", po::value< double >( &Apegrunt_options_base::s_distance_penalty_shape )->default_value(Apegrunt_options_base::s_distance_penalty_shape)->notifier(Apegrunt_options_base::s_init_distance_penalty_shape), "Distance penalty function shape parameter.")
 //		("distance-penalty-scaling", po::value< double >( &Apegrunt_options_base::s_distance_penalty_scaling )->default_value(Apegrunt_options_base::s_distance_penalty_scaling)->notifier(Apegrunt_options_base::s_init_distance_penalty_scaling), "The penalty scaling factor for the adaptive penalty function. The maximum penalty value will be lambda_J times the scaling_factor (0.0 == flat response).")
 
-		("input-indexing-base", po::value< std::size_t >( &Apegrunt_options_base::s_input_indexing_base )->default_value(Apegrunt_options_base::s_input_indexing_base)->notifier(Apegrunt_options_base::s_init_input_indexing_base), "Base index for input." )
-		("output-indexing-base", po::value< std::size_t >( &Apegrunt_options_base::s_output_indexing_base )->default_value(Apegrunt_options_base::s_output_indexing_base)->notifier(Apegrunt_options_base::s_init_output_indexing_base), "Base index for output." )
 //		("no-optimize-column-order", po::bool_switch( &Apegrunt_options_base::s_no_optimize_column_order )->default_value(Apegrunt_options_base::s_no_optimize_column_order), "Do not optimize data column order.")
 	;
 	m_algorithm_options.add_options()
@@ -292,8 +301,7 @@ void Apegrunt_options_base::AddOptions( boost::program_options::options_descript
 {
 	namespace po = boost::program_options;
 #ifdef APEGRUNT_STANDALONE_BUILD
-	opdesc->add(m_general_options);
-	opdesc->add(m_parallel_options);
+	opdesc->add(m_standalone_options);
 #endif // APEGRUNT_STANDALONE_BUILD
 	opdesc->add(m_alignment_options);
 	opdesc->add(m_algorithm_options);
@@ -304,32 +312,29 @@ bool Apegrunt_options_base::CheckOptions( boost::program_options::variables_map 
 {
 	try
 	{
-		/*
-		if( s_verbose && s_out )
+#ifdef APEGRUNT_STANDALONE_BUILD
+		if( varmap->count("version") && s_out )
 		{
-			*s_out << "apegrunt: being verbose." << std::endl;
+			*s_out << s_get_version_string() << std::endl;
+			exit(EXIT_SUCCESS);
 		}
-		*/
-
+		if( varmap->count("help") && s_out )
+		{
+			*s_out << s_title_string << "\n" << s_usage_string << s_options_string << std::endl;
+			exit(EXIT_SUCCESS);;
+		}
+#endif // APEGRUNT_STANDALONE_BUILD
 		if( !varmap->count("alignmentfile") && s_err )
 		{
-			*s_err << "apegrunt error: No alignment file specified!" << std::endl;
-#ifdef APEGRUNT_STANDALONE_BUILD
+			*s_err << "apegrunt ERROR: No alignment file specified!" << std::endl;
 			if( s_out )
 			{
 				*s_out << s_usage_string << std::endl;
 			}
-#endif // APEGRUNT_STANDALONE_BUILD
 			return false;
 		}
 
-		if( varmap->count("include-list") && varmap->count("exclude-list") && s_err )
-		{
-			*s_err << "apegrunt error: options \"--include-list\" and \"--exclude-list\" are mutually exclusive! Please use only one of them." << std::endl;
-			return false;
-		}
-
-	}
+    }
 	catch( std::exception& e)
 	{
 		if( s_err )
