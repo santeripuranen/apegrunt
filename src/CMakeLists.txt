@@ -46,11 +46,11 @@ set( APEGRUNT_CLANG_OPTIMIZATION_FLAGS "${APEGRUNT_CLANG_OPTIMIZATION_FLAGS}" )
 
 
 ### General release build flags
-set( APEGRUNT_RELEASE_FLAGS "-w -DNDEBUG -fvisibility=hidden -fvisibility-inlines-hidden -Wl,--strip-all" )
-
-if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+if("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
+	set( APEGRUNT_RELEASE_FLAGS "-w -DNDEBUG -fvisibility=hidden -fvisibility-inlines-hidden -Wl,--strip-all" )
 	set( CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall ${APEGRUNT_OPTIMIZATION_FLAGS} ${APEGRUNT_GCC_OPTIMIZATION_FLAGS} ${APEGRUNT_RELEASE_FLAGS}")
-elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+	set( APEGRUNT_RELEASE_FLAGS "-w -DNDEBUG -fvisibility=hidden -fvisibility-inlines-hidden -Wl,-s" )
 	set( CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall ${APEGRUNT_OPTIMIZATION_FLAGS} ${APEGRUNT_CLANG_OPTIMIZATION_FLAGS} ${APEGRUNT_RELEASE_FLAGS}")
 endif()
 
@@ -102,9 +102,14 @@ if( NOT APEGRUNT_NO_TBB )
 endif()
 
 if( UNIX )
-	target_link_libraries( libapegrunt pthread rt )
-	target_link_libraries( apegrunt pthread rt )
+	target_link_libraries( libapegrunt pthread )
+	target_link_libraries( apegrunt pthread )
 endif( UNIX )
+
+if( LINUX )
+	target_link_libraries( libapegrunt rt )
+	target_link_libraries( apegrunt rt )
+endif( LINUX )
 
 # Prevent linking against shared libraries on OS X;
 # Apple gcc always links against a shared version of a library if present,
