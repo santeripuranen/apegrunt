@@ -56,9 +56,9 @@ endif()
 
 # debug build flags
 set( APEGRUNT_DEBUG_FLAGS "-pg -g -ftree-vectorizer-verbose=2" )
-if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+if("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
 	set( CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall ${APEGRUNT_OPTIMIZATION_FLAGS} ${APEGRUNT_GCC_OPTIMIZATION_FLAGS} ${APEGRUNT_DEBUG_FLAGS}")
-elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
 	set( CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall ${APEGRUNT_OPTIMIZATION_FLAGS} ${APEGRUNT_CLANG_OPTIMIZATION_FLAGS} ${APEGRUNT_DEBUG_FLAGS}")
 endif()
 
@@ -102,14 +102,9 @@ if( NOT APEGRUNT_NO_TBB )
 endif()
 
 if( UNIX )
-	target_link_libraries( libapegrunt pthread )
-	target_link_libraries( apegrunt pthread )
+	target_link_libraries( libapegrunt pthread rt )
+	target_link_libraries( apegrunt pthread rt )
 endif( UNIX )
-
-if( LINUX )
-	target_link_libraries( libapegrunt rt )
-	target_link_libraries( apegrunt rt )
-endif( LINUX )
 
 # Prevent linking against shared libraries on OS X;
 # Apple gcc always links against a shared version of a library if present,
