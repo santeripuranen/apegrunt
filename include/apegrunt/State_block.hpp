@@ -248,12 +248,15 @@ struct alignas(16) State_block<StateT,16>
 	}
 };
 
+#ifdef __POPCNT__
 template< typename StateT >
 inline std::size_t count_identical( State_block<StateT,16> lhs, State_block<StateT,16> rhs )
 {
 	// Intel's had popcnt since Nehalem, so should be fairly safe to use nowadays
 	return _mm_popcnt_u32( _mm_movemask_epi8( _mm_cmpeq_epi8( lhs(), rhs() ) ) );
 }
+#endif // __POPCNT__
+
 #endif // __SSE2__
 
 #ifdef __AVX__
@@ -328,12 +331,14 @@ struct alignas(32) State_block<StateT,32>
 
 #ifdef __AVX2__
 
+#ifdef __POPCNT__
 template< typename StateT >
 inline std::size_t count_identical( State_block<StateT,32> lhs, State_block<StateT,32> rhs )
 {
 	// Intel's had popcnt since Nehalem, so should be fairly safe to use nowadays
 	return _mm_popcnt_u64( _mm256_movemask_epi8( _mm256_cmpeq_epi8( lhs(), rhs() ) ) );
 }
+#endif // __POPCNT__
 
 #endif // __AVX2__
 
