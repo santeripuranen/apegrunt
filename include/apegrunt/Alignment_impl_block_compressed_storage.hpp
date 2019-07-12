@@ -32,6 +32,7 @@
 #include <mutex> // for std::mutex
 
 #include <boost/range/adaptor/indexed.hpp>
+#include <boost/range/irange.hpp>
 
 #include "Alignment_forward.h"
 #include "Alignment_impl_base.hpp"
@@ -51,7 +52,9 @@
 #include "accumulators/distribution_generator_csv.hpp"
 
 #include "Apegrunt_utility.hpp"
+#include "misc/TernarySearchTree.hpp"
 #include "misc/Math.hpp"
+#include "misc/Stopwatch.hpp"
 
 namespace apegrunt {
 
@@ -85,7 +88,7 @@ public:
 	}
 
 	template< typename StateT, typename IndexContainerT >
-	inline void accumulate( apegrunt::State_block<StateT,BlockSize> stateblock, const IndexContainerT& sequence_indices, frequency_t* const weights=nullptr )
+	inline void accumulate( const apegrunt::State_block<StateT,BlockSize>& stateblock, const IndexContainerT& sequence_indices, frequency_t* const weights=nullptr )
 	{
 		//const auto n_seq = frequency_t( sequence_indices.size() );
 		const frequency_t weight = weights
@@ -126,6 +129,108 @@ namespace apegrunt {
 
 template< typename AlignmentT > class Alignment_factory;
 
+template< typename StateT >
+class Block_adder
+{
+public:
+	using state_t = StateT;
+	using my_type = Block_adder<state_t>;
+
+	using block_index_t = typename Alignment<state_t>::block_index_t;
+	using block_accounting_t = typename Alignment<state_t>::block_accounting_t;
+	using block_accounting_ptr = typename Alignment<state_t>::block_accounting_ptr;
+
+	using block_storage_t = typename Alignment<state_t>::block_storage_t;
+	using block_storage_ptr = typename Alignment<state_t>::block_storage_ptr;
+
+	using block_type = typename Alignment<state_t>::block_type;
+
+	using block_finder_t = apegrunt::TernarySearchTree<block_type,block_index_t>;
+	using block_finder_storage_t = std::vector< block_finder_t >;
+
+	//Block_storage() = default;
+
+	Block_adder( block_storage_ptr block_storage )
+	: m_block_storage_ptr( block_storage )
+	{
+	}
+/*
+	Block_adder( block_storage_ptr block_storage, block_accounting_ptr block_accounting )
+	: m_block_storage_ptr( block_storage ),
+	  m_block_accounting_ptr( block_accounting )
+	{
+	}
+*/
+	Block_adder( my_type&& other )
+	: m_block_storage_ptr( other.m_block_storage_ptr ),
+	  //m_block_accounting_ptr( other.m_block_accounting_ptr ),
+	  m_block_finders( std::move( other.m_block_finders ) )
+	{
+	}
+
+	//block_index_t add( std::size_t block_col, const block_type& block, block_index_t owner_id )
+	inline block_index_t insert( const block_type& block, std::size_t block_col, block_index_t source_index )
+	{
+		block_index_t block_index(0);
+		if( m_block_storage_ptr->size() <= block_col )
+		{
+			m_block_storage_ptr->emplace_back( 1, block );
+			//m_block_accounting_ptr->emplace_back( 1, source_index );
+			m_block_finders.emplace_back( block, block_index );
+		}
+		else
+		{
+			const block_index_t candidate_index = (*m_block_storage_ptr)[block_col].size();
+			block_index = m_block_finders[block_col].insert( block, candidate_index )->value();
+			if( candidate_index == block_index )
+			{
+				(*m_block_storage_ptr)[block_col].emplace_back( block );
+				//(*m_block_accounting_ptr)[block_col].emplace_back();
+			}
+			//(*m_block_accounting_ptr)[block_col][block_index].push_back(source_index);
+		}
+		return block_index;
+	}
+
+	inline block_type get( std::size_t block_col, block_index_t block_index ) const
+	{
+		return (m_block_storage_ptr->size() > block_col) ? ( (*m_block_storage_ptr)[block_col].size() > block_index ? (*m_block_storage_ptr)[block_col][block_index] : block_type() ) : block_type();
+	}
+
+	inline block_storage_ptr get_block_storage() { return m_block_storage_ptr; }
+
+	inline void statistics( std::ostream *out=nullptr ) const
+	{
+		if( out )
+		{
+			std::size_t nkeys(0), nunique(0), nnodes(0), bytesize(0), minodes(std::numeric_limits<std::size_t>::max() ), manodes(0);
+			for( const auto& tree: m_block_finders )
+			{
+				nkeys += tree.nkeys();
+				nunique += tree.nunique_keys();
+				nnodes += tree.nnodes();
+				bytesize += tree.bytesize();
+				minodes = std::min( minodes, tree.nnodes() );
+				manodes = std::max( manodes, tree.nnodes() );
+			}
+			*out << "apegrunt: B|3:"
+					<< " tree size = " << apegrunt::memory_string( bytesize )
+					//<< " #keys unique/total=" << nunique << "/" << nkeys << " [CR=" << double(nkeys)/double(nunique) << "]"
+					<< " (nodes = " << nnodes << " [min/mean/max per tree = "
+					<< minodes << "/" << std::size_t(double(nnodes)/double(m_block_finders.size())) << "/" << manodes << "])"
+					//<< " nodesize=" << sizeof(typename block_finder_t::node_t) << " bytes"
+					<< "\n"
+			;
+			//std::cout << "apegrunt: sizeof(block_accounting_itr)=" << sizeof(typename block_accounting_container_t::const_iterator) << std::endl;
+		}
+	}
+
+private:
+	block_storage_ptr m_block_storage_ptr;
+	//block_accounting_ptr m_block_accounting_ptr;
+	block_finder_storage_t m_block_finders;
+};
+
 template< typename StateVectorT > //=StateVector_impl_block_compressed_alignment_storage<nucleic_acid_state_t> >
 class Alignment_impl_block_compressed_storage : public Alignment_impl_base< Alignment_impl_block_compressed_storage<StateVectorT>, typename StateVectorT::state_t >
 {
@@ -154,6 +259,7 @@ public:
 	using distance_matrix_ptr = typename base_type::distance_matrix_ptr;
 
 	using block_index_t = typename base_type::block_index_t;
+	using block_accounting_container_t = typename base_type::block_accounting_container_t;
 	using block_accounting_t = typename base_type::block_accounting_t;
 	using block_accounting_ptr = typename base_type::block_accounting_ptr;
 
@@ -163,6 +269,9 @@ public:
 
 	using block_storage_t = typename base_type::block_storage_t;
 	using block_storage_ptr = typename base_type::block_storage_ptr;
+
+	using block_adder_t = Block_adder<state_t>;
+	using block_adder_ptr = std::shared_ptr< block_adder_t >;
 
 	using block_indices_t = typename base_type::block_indices_t;
 	using block_indices_ptr = typename base_type::block_indices_ptr;
@@ -177,17 +286,33 @@ public:
 	using statepresence_block_storage_t = typename base_type::statepresence_block_storage_t;
 	using statepresence_block_storage_ptr = typename base_type::statepresence_block_storage_ptr;
 
-	Alignment_impl_block_compressed_storage() : m_rows(), m_block_storage( std::make_shared<block_storage_t>() ) { }
+	Alignment_impl_block_compressed_storage()
+	: m_rows(),
+	  m_block_storage( std::make_shared<block_storage_t>() ),
+	  m_block_adder( std::make_shared<block_adder_t>( m_block_storage ) )
+	  //m_block_accounting( std::make_shared<block_accounting_t>() )
+	  //m_block_adder( std::make_shared<block_adder_t>( m_block_storage, m_block_accounting ) ) // m_block_adder member should be declared after m_block_storage
+	{
+		//m_block_adder = std::make_shared<block_adder_t>( m_block_storage, m_block_accounting );
+	}
 
 	~Alignment_impl_block_compressed_storage() = default;
 
 	Alignment_impl_block_compressed_storage( const my_type& other )
-		: base_type( other.id_string() ), m_rows( other.m_rows ), m_block_storage( other.m_block_storage )
+		: base_type( other.id_string() ),
+		  m_rows( other.m_rows ),
+		  m_block_storage( other.m_block_storage ),
+		  //m_block_accounting( other.m_block_accounting ),
+		  m_block_adder( other.m_block_adder )
 	{
 	}
 
 	Alignment_impl_block_compressed_storage( my_type&& other ) noexcept
-		: base_type( other.id_string() ), m_rows( std::move(other.m_rows) ), m_block_storage(other.m_block_storage) //m_block_storage( std::move(other.m_block_storage) )
+		: base_type( other.id_string() ),
+		  m_rows( std::move(other.m_rows) ),
+		  m_block_storage( other.m_block_storage ),
+		  //m_block_accounting( other.m_block_accounting ),
+		  m_block_adder( other.m_block_adder )
 	{
 	}
 
@@ -196,6 +321,8 @@ public:
 		this->set_id_string( other.id_string() );
 		m_rows = other.m_rows;
 		m_block_storage = other.m_block_storage;
+		//m_block_accounting = other.m_block_accounting;
+		m_block_adder = other.m_block_adder;
 		return *this;
 	}
 
@@ -203,7 +330,9 @@ public:
 	{
 		this->set_id_string( other.id_string() );
 		m_rows = std::move( other.m_rows );
-		m_block_storage = other.m_block_storage; // std::move( other.m_block_storage );
+		m_block_storage = other.m_block_storage;
+		//m_block_accounting = other.m_block_accounting;
+		m_block_adder = other.m_block_adder;
 		return *this;
 	}
 
@@ -238,21 +367,17 @@ public:
 
     inline frequencies_ptr frequencies() const
     {
-		//std::cout << " {get frequencies"; std::cout.flush();
     	m_cache_frequencies_mutex.lock();
     	if( !m_frequencies ) { this->cache_column_frequencies(); }
     	m_cache_frequencies_mutex.unlock();
-		//std::cout << "}"; std::cout.flush();
     	return m_frequencies;
     }
 
     inline w_frequencies_ptr w_frequencies() const
     {
-		//std::cout << " {get w_frequencies"; std::cout.flush();
     	m_cache_w_frequencies_mutex.lock();
     	if( !m_w_frequencies ) { this->cache_column_w_frequencies(); }
     	m_cache_w_frequencies_mutex.unlock();
-		//std::cout << "} " << std::endl;
     	return m_w_frequencies;
     }
 
@@ -343,24 +468,51 @@ public:
 		using std::cbegin; using std::cend;
 		if( !out ) { return; }
 
+		stopwatch::stopwatch cputimer( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
+		*Apegrunt_options::get_out_stream() << "apegrunt: get block accounting"; Apegrunt_options::get_out_stream()->flush();
+		cputimer.start();
+		const auto block_accounting = this->get_block_accounting();
+		cputimer.stop(); cputimer.print_timing_stats();
+
 		const std::size_t n_loci = this->n_loci();
 		const std::size_t n_seqs = m_rows.size();
 		const std::size_t n_block_column_groups = apegrunt::get_number_of_blocks(n_loci); // n_loci / N + ( n_loci % N == 0 ? 0 : 1 );
 		const std::size_t indexing_overhead_mem = std::accumulate( cbegin(m_rows), cend(m_rows), std::size_t(0), [=]( std::size_t sum, const auto& seq ) { return sum += seq->bytesize(); } );
 		const std::size_t dense_indexing_overhead_mem = sizeof(block_index_t)*n_block_column_groups*n_seqs;
-/*
-		std::size_t duals = 0;
-		std::size_t full_dual_blocks = 0;
-		std::size_t full_dual_cols = 0;
-*/
+
+		std::size_t dense_indexing_mem = 0, compr_indexing_mem = 0;
+
+		//std::map< block_index_t, std::set<block_index_t> > stats;
+
+		// collect memory use statistics
+		/*
+				acc::accumulator_set<double, acc::stats<acc::tag::std(acc::from_distribution),acc::tag::distribution_bincount> >
+				blockcount_distribution( acc::tag::distribution::binwidth=1 );
+		*/
+		//std::cout << "apegrunt: sizeof(block_accounting_itr)=" << sizeof(typename block_accounting_container_t::const_iterator) << std::endl;
+		for( std::size_t col=0; col < m_block_storage->size(); ++col )
+		{
+			for( const auto& index_container: (*block_accounting)[col] )
+			{
+				//gather_statistics( index_container, stats );
+				//blockcount_distribution( index_container.size() );
+				dense_indexing_mem += index_container.size()*sizeof(block_index_t);
+				compr_indexing_mem += apegrunt::bytesize(index_container);
+#ifndef NDEBUG // Debugging
+				std::size_t size_verify = 0;
+				for( auto i: index_container ) { ++size_verify;	}
+				if( index_container.size() != size_verify )
+				{
+					std::cout << "apegrunt-DEBUG: container size mismatch (reported=" << index_container.size() << " verified=" << size_verify << ")" << std::endl;
+				}
+#endif // NDEBUG
+			}
+		}
+
 		std::size_t n_cblocks = 0;
 		std::size_t min_blocks_per_column = m_block_storage->front().size();
 		std::size_t max_blocks_per_column = 0;
 		std::vector<std::size_t> col_size; col_size.reserve(m_block_storage->size());
-		//std::map<std::size_t,std::size_t> nb_bins;
-
-		//std::set<block_type> global_blocks;
-		std::vector<block_type> global_blocks;
 
 		for( const auto& block_col: *m_block_storage )
 		{
@@ -370,30 +522,6 @@ public:
 			min_blocks_per_column = std::min(min_blocks_per_column,nb);
 			max_blocks_per_column = std::max(max_blocks_per_column,nb);
 			n_cblocks += nb;
-/*
-			using std::cbegin; using std::cend;
-			for( const auto& block: block_col )
-			{
-				auto pos = std::find( cbegin(global_blocks), cend(global_blocks), block );
-				if( pos == cend(global_blocks) )
-				{
-					global_blocks.emplace_back( block );
-				}
-			}
-*/
-			// if using std::set
-			//for( const auto& block: block_col ) { global_blocks.insert( block ); }
-/*
-			std::size_t fd_count = 0;
-			for( const auto block: block_col )
-			{
-				std::size_t dcount = 0;
-				for( std::size_t i = 0; i < N; ++i ) { dcount += ( i%2 != 0 ? (block[i-1] == block[i]) : 0 ); }
-				duals += dcount;
-				fd_count += (N/2 == dcount);
-			}
-			full_dual_blocks += fd_count;
-*/
 		}
 
 		// Get state statistics
@@ -410,17 +538,17 @@ public:
 		for( std::size_t i=2; i < state_stats.size(); ++i ) { SNPs += state_stats[i]; }
 		// end Get state statistics
 
-		const std::size_t n_gblocks = global_blocks.size();
-
 		std::sort( col_size.begin(), col_size.end() );
 		const std::size_t n_col_median = col_size[ col_size.size()/2 ];
 		const std::size_t n_col_mean = n_cblocks / n_block_column_groups;
 
-		const std::size_t onucs = n_loci*n_seqs;
-		const std::size_t cnucs = n_cblocks*N;
+		const std::size_t onucs = n_loci*n_seqs; // # of uncompressed nucleotides
+		const std::size_t cnucs = n_cblocks*N; // # of compressed nucleotides
+		const std::size_t ucblocks = n_seqs*n_block_column_groups; // # of uncompressed blocks
 		const std::size_t onucs_mem = onucs*sizeof(state_t);
 		const std::size_t cnucs_mem = cnucs*sizeof(state_t);
-		const std::size_t gnucs_mem = n_gblocks*N*sizeof(state_t);
+		const std::size_t ucblocks_mem = ucblocks*sizeof(state_t);
+		//const std::size_t gnucs_mem = n_gblocks*N*sizeof(state_t);
 
 		*out << "apegrunt: alignment has " << n_seqs << " samples and " << n_loci << " positions (" << onucs << " outcomes in total)\n";
 		*out << "apegrunt: alignment has " << SNPs << " SNPs in total\n";
@@ -437,16 +565,18 @@ public:
 //		*out << "apegrunt: stateblock compression uses " << n_block_column_groups << " column groups of " << N << "-nucleotide blocks (" << sizeof(block_type) << "B per block)\n";
 		*out << "apegrunt: uncompressed size = " << memory_string(onucs_mem) << "\n";
 // Compressed blocks -- block-wise lists
-		*out << "apegrunt: compressed size = " << memory_string(cnucs_mem+indexing_overhead_mem) << " (" << memory_string(cnucs_mem) << " for " << n_cblocks << " blocks and " << memory_string(indexing_overhead_mem) << " for indexing)\n";
-		*out << "apegrunt: compression ratio = " << double(onucs_mem)/double(cnucs_mem+indexing_overhead_mem) << "\n";
+//		*out << "apegrunt: compressed size = " << memory_string(cnucs_mem+indexing_overhead_mem) << " (" << memory_string(cnucs_mem) << " for " << n_cblocks << " blocks and " << memory_string(indexing_overhead_mem) << " for indexing)\n";
+//		*out << "apegrunt: compression ratio = " << double(onucs_mem)/double(cnucs_mem+indexing_overhead_mem) << "\n";
+//		*out << "apegrunt: 1 compressed size = " << memory_string(cnucs_mem+dense_indexing_mem) << " (" << memory_string(cnucs_mem) << " for " << n_cblocks << " blocks and " << memory_string(dense_indexing_mem) << " for dense indexing)\n";
+//		*out << "apegrunt: 1 compression ratio = " << double(onucs_mem)/double(cnucs_mem+dense_indexing_mem) << "\n";
+//		*out << "apegrunt: 2 compressed size = " << memory_string(cnucs_mem+compr_indexing_mem) << " (" << memory_string(cnucs_mem) << " for " << n_cblocks << " blocks [CR=" << double(ucblocks_mem)/double(n_cblocks) << "] and " << memory_string(compr_indexing_mem) << " for compressed indexing [CR=" << double(dense_indexing_mem)/double(compr_indexing_mem) << "])\n";
+//		*out << "apegrunt: 2 compression ratio = " << double(onucs_mem)/double(cnucs_mem+compr_indexing_mem) << "\n";
+		*out << "apegrunt: compressed size = " << memory_string(cnucs_mem+compr_indexing_mem) << " (" << memory_string(cnucs_mem) << " for " << n_cblocks << " blocks [CR=" << double(ucblocks_mem)/double(n_cblocks) << "] and " << memory_string(compr_indexing_mem) << " for compressed indexing [CR=" << double(dense_indexing_mem)/double(compr_indexing_mem) << "])\n";
+		*out << "apegrunt: compression ratio = " << double(onucs_mem)/double(cnucs_mem+compr_indexing_mem) << "\n";
 		*out << "apegrunt: min/mean/median/max # of stateblocks per column = " << min_blocks_per_column << "/" << n_col_mean << "/" << n_col_median << "/" << max_blocks_per_column << "\n";
-//		*out << "apegrunt: globally compressed size = " << memory_string(gnucs_mem+indexing_overhead_mem) << " (" << memory_string(gnucs_mem) << " for " << n_gblocks << " globally unique blocks and " << memory_string(indexing_overhead_mem) << " for indexing)\n";
-//		*out << "apegrunt: compression ratio = " << double(onucs_mem)/double(gnucs_mem+indexing_overhead_mem) << " (uncompressed/global) | compression ratio = " << double(n_cblocks)/double(n_gblocks) << " (compressed blocks/globally compressed blocks)" << "\n";
-/*
-		*out << "apegrunt: duals = " << duals << " (" << double(duals)/double(onucs/2) << ")\n";
-		*out << "apegrunt: full dual blocks = " << full_dual_blocks << " (" << double(full_dual_blocks)/double(n_cblocks) << ")\n";
-		*out << "apegrunt: full dual block columns = " << full_dual_cols << " (" << double(full_dual_cols)/double(n_block_column_groups) << ")\n";
-*/
+		m_block_adder->statistics( out );
+		out->flush();
+
 	}
 
 private:
@@ -457,9 +587,11 @@ private:
 	// be modified during the lifetime of a const Alignment..
 	std::vector< StateVector_ptr<state_t> > m_rows;
 	block_storage_ptr m_block_storage;
+	mutable block_accounting_ptr m_block_accounting;
+	block_adder_ptr m_block_adder; // should always be declared *after* m_block_storage
 
 	// ..but all caches may be modified and are therefore declared mutable
-	mutable block_accounting_ptr m_block_accounting;
+	//mutable block_accounting_ptr m_block_accounting;
 	mutable block_weights_ptr m_block_weights;
 	mutable frequencies_ptr m_frequencies;
 	mutable w_frequencies_ptr m_w_frequencies;
@@ -479,38 +611,65 @@ private:
 	// pull in all
 	void cache_block_accounting() const
 	{
-		namespace acc = boost::accumulators;
+		//namespace acc = boost::accumulators;
 
-		//std::cout << "apegrunt: cache block accounting\n"; std::cout.flush();
 		//using boost::get;
 		using std::cbegin;
 		using std::cend;
 		m_block_accounting = std::make_shared<block_accounting_t>( m_block_storage->size() );
 
-		std::size_t flat_mem = 0;
-		std::size_t compr_mem = 0;
+		//std::size_t flat_mem = 0;
+		//std::size_t compr_mem = 0;
 
-		// reserve memory
+
+// /*
+		auto& deref = *m_block_accounting;
+
+		// reserve memory as far as we can
 		for( std::size_t col=0; col < m_block_storage->size(); ++col )
 		{
-			(*m_block_accounting)[col].resize( (*m_block_storage)[col].size() );
+			//(*m_block_accounting)[col].resize( (*m_block_storage)[col].size() );
+			deref[col].resize( (*m_block_storage)[col].size() );
 		}
 
-		// add block indices
+		// add block indices -- the access order is really causing hurt here
 		for( std::size_t seq=0; seq < this->size(); ++seq )
 		{
 			std::size_t col=0;
 			for( const auto& block_index: m_rows[seq]->get_block_indices() )
 			{
-				(*m_block_accounting)[col][block_index].push_back(seq);
+				//(*m_block_accounting)[col][block_index].push_back(seq);
+				deref[col][block_index].push_back(seq);
+				//(*m_block_accounting)[col][block_index] << seq; // OK, we can do this, although it's not really helpful
 				++col;
 			}
 		}
+// */
+/*
+		using boost::get;
+
+		// reserve memory as far as we can
+		for( auto zipped: apegrunt::zip_range( m_block_accounting, m_block_storage ) )
+		{
+			get<0>(zipped).resize( get<1>(zipped).size() );
+		}
+
+		// add block indices -- the access order is really causing hurt here
+		for( std::size_t seq=0; seq < this->size(); ++seq )
+		{
+			for( auto zipped: apegrunt::zip_range( m_block_accounting, m_rows[seq]->get_block_indices() ) )
+			{
+				get<0>(zipped)[ get<1>(zipped) ] << seq;
+			}
+		}
+*/
+
 /*
 		acc::accumulator_set<double, acc::stats<acc::tag::std(acc::from_distribution),acc::tag::distribution_bincount> >
 		blockcount_distribution( acc::tag::distribution::binwidth=1 );
 */
 		// collect memory use statistics
+/*
 		for( std::size_t col=0; col < m_block_storage->size(); ++col )
 		{
 			for( const auto& index_container: (*m_block_accounting)[col] )
@@ -520,6 +679,7 @@ private:
 				compr_mem += apegrunt::bytesize(index_container);
 			}
 		}
+*/
 /*
 		{ // block pair statistics -- beware: O(N^2) in number of block cols = very costly
 			std::size_t matching_pairs = 0;
@@ -688,7 +848,6 @@ private:
 				column_frequency_accumulator.accumulate( sequence_blocks[block_index], indices[block_index] );
 			}
 		}
-		//std::cout << "}"; std::cout.flush();
 	}
 
 	void cache_column_w_frequencies() const
@@ -762,6 +921,7 @@ private:
 		const auto& block_accounting = *(this->get_block_accounting());
 		const auto& blocks = *(this->get_block_storage());
 
+	    //std::cout << "apegrunt: itr over column blocks"; std::cout.flush();
 		for( std::size_t colblockidx=0; colblockidx < number_of_blocks; ++colblockidx )
 		{
 			const auto& sequence_blocks = blocks[colblockidx];
@@ -771,14 +931,22 @@ private:
 			{
 				const auto block_i = sequence_blocks[bidx_i];
 				const auto& block_i_seqs = indices[bidx_i];
+
+				// cache dense block indices for speed
+				const auto block_i_seqs_cached = apegrunt::get_dense( block_i_seqs );
+
 				for( std::size_t bidx_j = 0; bidx_j < bidx_i; ++bidx_j )
 				{
 					const auto ndiff = n_loci_per_block - count_identical( block_i, sequence_blocks[bidx_j] );
 					const auto& block_j_seqs = indices[bidx_j];
-					for( const auto i : block_i_seqs )
+					std::vector<block_index_t> block_j_seqs_cached( block_j_seqs.cbegin(), block_j_seqs.cend() );
+
+					for( const auto j : block_j_seqs )
 					{
-						for( const auto j : block_j_seqs )
+						for( const auto i : block_i_seqs_cached )
+						//for( const auto i : block_i_seqs )
 						{
+							//std::cout << "i=" << i << " j=" << j << std::endl;
 							dmat[ i < j ? j*(j-1)/2+i : i*(i-1)/2+j ] += ndiff; // bad inner-loop branched memory access
 						}
 					}
@@ -915,7 +1083,9 @@ private:
 			reserve = m_rows.back()->size() / N + ( m_rows.back()->size() % N == 0 ? 0 : 1 );
 		}
 
-		m_rows.emplace_back( make_StateVector_ptr<statevector_t>( m_block_storage, name, reserve ) );
+
+		//m_rows.emplace_back( make_StateVector_ptr<statevector_t>( m_block_storage, name, reserve ) );
+		m_rows.emplace_back( make_StateVector_ptr<statevector_t>( m_block_adder, name, m_rows.size(), reserve ) );
 		return static_cast<statevector_t*>(m_rows.back().get());
 	}
 

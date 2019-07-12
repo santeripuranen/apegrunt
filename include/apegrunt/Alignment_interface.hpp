@@ -36,6 +36,7 @@
 #include "Loci_forward.h"
 #include "State_block.hpp"
 
+#include "apegrunt/IntegerSequence_Hybrid_bitset_range.h"
 #include "misc/Vector.h"
 
 #include "aligned_allocator.hpp"
@@ -77,15 +78,17 @@ public:
 	using w_frequencies_t = std::vector<w_frequency_t>;
 	using w_frequencies_ptr = std::shared_ptr< w_frequencies_t >;
 
-	using distance_matrix_t = std::vector<std::size_t>;
+	using distance_matrix_t = std::vector<uint32_t>;
 	using distance_matrix_ptr = std::shared_ptr< distance_matrix_t >;
 
 	using block_weight_t = std::array< real_t, number_of_states<state_t>::value >;
 	using block_weights_t = std::vector< std::vector<block_weight_t> >;
 	using block_weights_ptr = std::shared_ptr< block_weights_t >;
 
-	using block_index_t = uint16_t;
-	using block_accounting_t = std::vector< std::vector< std::vector<block_index_t> > >;
+	using block_index_t = uint32_t; // uint16_t is only good for alignments up to 2^16 (=65536) samples
+	//using block_accounting_container_t = std::vector<block_index_t>;
+	using block_accounting_container_t = apegrunt::Hybrid_bitset_sequence<block_index_t>; // effective range is one bit less than block_index_t type
+	using block_accounting_t = std::vector< std::vector< block_accounting_container_t > >;
 	using block_accounting_ptr = std::shared_ptr< block_accounting_t >;
 
 	using block_indices_t = std::vector< std::size_t >;

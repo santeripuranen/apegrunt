@@ -47,6 +47,7 @@
 #include "aligned_allocator.hpp"
 
 #include "IndexVector.h"
+#include "misc/Stopwatch.hpp"
 
 namespace apegrunt {
 
@@ -62,19 +63,17 @@ public:
 	enum { N=block_type::N };
 
 	using parent_t = Alignment_impl_block_compressed_storage< my_type >;
-/*
-	//These are defined in the interface class StateVector<>
-	using block_index_t = uint16_t;
-	using block_index_container_t = IndexVector< block_index_t >;
-	using frequencies_type = std::array< std::size_t, number_of_states<state_t>::value >;
-*/
 	using block_index_t = typename base_type::block_index_t;
 	using block_index_container_t = typename base_type::block_index_container_t;
-	using frequencies_type = typename base_type::frequencies_type;
 
 	using allocator_t = memory::AlignedAllocator<block_type,alignof(block_type)>;
 	using block_storage_t = std::vector< std::vector< block_type, allocator_t > >;
-	using Block_Storage_ptr = std::shared_ptr< block_storage_t >;
+	using block_storage_ptr = std::shared_ptr< block_storage_t >;
+
+	//using block_adder_t = typename parent_t::block_adder_t;
+	//using block_adder_ptr = typename parent_t::block_adder_ptr;
+	using block_adder_t = Block_adder<state_t>;
+	using block_adder_ptr = std::shared_ptr< block_adder_t >;
 
 	using const_iterator = typename base_type::const_iterator;
 	using iterator = typename base_type::iterator ;
@@ -82,15 +81,16 @@ public:
 	using value_type = typename base_type::value_type;
 
 	//StateVector_impl_block_compressed_alignment_storage() = delete;
-	StateVector_impl_block_compressed_alignment_storage() : base_type() { }
+	StateVector_impl_block_compressed_alignment_storage() : base_type(), m_dirty(false) { }
 	~StateVector_impl_block_compressed_alignment_storage() = default;
 
 	StateVector_impl_block_compressed_alignment_storage( const my_type& other )
 	: base_type( other.id_string(), other.multiplicity() ),
 	  m_block_storage(other.m_block_storage),
 	  m_block_indices(other.m_block_indices),
+	  m_index(other.m_index),
 	  m_cache(other.m_cache),
-	  m_frequencies(other.m_frequencies),
+	  //m_frequencies(other.m_frequencies),
 	  m_block_col(other.m_block_col),
 	  m_pos(other.m_pos),
 	  m_size(other.m_size),
@@ -102,8 +102,9 @@ public:
 	: base_type( other.id_string(), other.multiplicity() ),
 	  m_block_storage( std::move( other.m_block_storage ) ),
 	  m_block_indices( std::move( other.m_block_indices ) ),
+	  m_index( std::move( other.m_index  ) ),
 	  m_cache( std::move( other.m_cache ) ),
-	  m_frequencies( std::move( other.m_frequencies ) ),
+	  //m_frequencies( std::move( other.m_frequencies ) ),
 	  m_block_col(other.m_block_col),
 	  m_pos(other.m_pos),
 	  m_size(other.m_size),
@@ -118,7 +119,7 @@ public:
 		m_block_storage = std::move(other.m_block_storage);
 		m_block_indices = std::move(other.m_block_indices);
 		m_cache = other.m_cache;
-		m_frequencies = other.m_frequencies;
+		//m_frequencies = other.m_frequencies;
 		m_block_col = other.m_block_col;
 		m_pos = other.m_pos;
 		m_size = other.m_size;
@@ -141,12 +142,29 @@ public:
 		return *this;
 	}
 */
-	StateVector_impl_block_compressed_alignment_storage( Block_Storage_ptr& block_storage, const std::string& id_string, std::size_t size_hint=0 )
+	StateVector_impl_block_compressed_alignment_storage( block_storage_ptr& block_storage, const std::string& id_string, std::size_t size_hint=0 )
 	: base_type( id_string ),
 	  m_block_storage( block_storage ),
 	  m_block_indices(),
+	  m_index(0),
 	  m_cache(),
-	  m_frequencies{0},
+	  //m_frequencies{0},
+	  m_block_col(0),
+	  m_pos(0),
+	  m_size(0),
+	  m_dirty(false)
+	{
+		if( size_hint > 0 ) { m_block_indices.reserve(size_hint); }
+	}
+
+	StateVector_impl_block_compressed_alignment_storage( block_adder_ptr& block_adder, const std::string& id_string, std::size_t index, std::size_t size_hint=0 )
+	: base_type( id_string ),
+	  m_block_storage( block_adder->get_block_storage() ),
+	  m_block_adder( block_adder ),
+	  m_block_indices(),
+	  m_index(index),
+	  m_cache(),
+	  //m_frequencies{0},
 	  m_block_col(0),
 	  m_pos(0),
 	  m_size(0),
@@ -212,10 +230,10 @@ public:
 			if( index != m_access_cache_col )
 			{
 				m_access_cache_col = index;
-				m_access_cache_block = (*m_block_storage)[index][ m_block_indices[index] ];
+				//m_access_cache_block = (*m_block_storage)[index][ m_block_indices[index] ];
+				m_access_cache_block = m_block_adder->get(index, m_block_indices[index]); // ..but trust that we are internally consistent
 			}
 			return m_access_cache_block;
-			//return (*m_block_storage)[index][ m_block_indices[index] ]; // ..but trust that we are internally consistent
 		}
 		else
 		{
@@ -224,7 +242,7 @@ public:
 			// to one-past-end (i.e. iterator == iterator.end(), which should be caught in calling code). End users need not be burdened with the
 			// confusing error message, as the condition is completely benign in that case.
 #ifndef NDEBUG
-			*Apegrunt_options::get_err_stream() << "apegrunt::StateVector: block index=" << index << " out_of_range" << std::endl;
+			*Apegrunt_options::get_err_stream() << "apegrunt-DEBUG: apegrunt::StateVector block index=" << index << " out_of_range" << std::endl;
 #endif // NDEBUG
 			return block_type();
 		}
@@ -232,7 +250,7 @@ public:
 
     inline const block_index_container_t& get_block_indices() const { return m_block_indices; }
 
-    inline const frequencies_type& frequencies() const { return m_frequencies; }
+    //inline const frequencies_type& frequencies() const { return m_frequencies; }
 
 	inline std::size_t operator&&( const my_type& rhs ) const
 	{
@@ -267,6 +285,8 @@ public:
 
 	inline std::size_t bytesize() const { return apegrunt::bytesize(m_block_indices); }
 
+	inline void report_times() const { std::cout << "parse=" << m_build_timer_parse.elapsed_cycles() << " store=" << m_build_timer_store.elapsed_cycles() << std::endl; }
+
 	inline const std::type_info& type() const { return typeid(my_type); }
 /*
 	inline StateVector_subscript_proxy< State_holder<state_t> > subscript_proxy() const
@@ -283,8 +303,10 @@ private:
 	friend iterator_impl;
 	friend const_iterator_impl;
 
-	Block_Storage_ptr m_block_storage;
+	block_storage_ptr m_block_storage;
+	block_adder_ptr m_block_adder;
 	block_index_container_t m_block_indices;
+	const std::size_t m_index;
 	block_type m_cache;
 	mutable block_type m_access_cache_block;
 	mutable std::size_t m_access_cache_col;
@@ -293,6 +315,8 @@ private:
 	std::size_t m_pos;
 	std::size_t m_size;
 	bool m_dirty;
+	stopwatch::stopwatch m_build_timer_parse; // ( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
+	stopwatch::stopwatch m_build_timer_store;
 
 	// Parser interface
 	template< typename T >
@@ -327,22 +351,24 @@ private:
 		m_dirty=false;
 		m_size=0;
 	}
-
+/*
 	inline void update_frequencies()
 	{
 		for( std::size_t i = 0; i < std::min(m_pos,std::size_t(N)); ++i ) { ++( m_frequencies[std::size_t(m_cache[i])] ); }
 	}
-
+*/
 	inline void flush_block_buffer()
 	{
 		if(m_dirty)
 		{
+/* Original/reference code
 			if( m_block_storage->size() < m_block_col+1 ) { m_block_storage->emplace_back( 1, m_cache ); m_block_indices.push_back(0); }
 			else
 			{
 				using std::cbegin; using std::cend;
 				auto& block_list = (*m_block_storage)[m_block_col];
 				auto list_pos = std::find( cbegin(block_list), cend(block_list), m_cache );
+				//auto list_pos = block_list.find( m_cache );
 				if( list_pos == cend(block_list) )
 				{
 					block_list.emplace_back( m_cache ); m_block_indices.push_back( block_list.size()-1 );
@@ -352,7 +378,10 @@ private:
 					m_block_indices.push_back( std::distance( cbegin(block_list), list_pos ) );
 				}
 			}
-			this->update_frequencies();
+*/
+			// new TST-based routine
+			m_block_indices.push_back( m_block_adder->insert( m_cache, m_block_col, m_index ) );
+
 			if( N  == m_pos ) // test if cache is full or partially filled
 			{
 				// update access cache
@@ -377,9 +406,10 @@ private:
     {
         ar & BOOST_SERIALIZATION_NVP(boost::serialization::base_object< base_type >(*this));
         ar & BOOST_SERIALIZATION_NVP(m_block_storage);
+        ar & BOOST_SERIALIZATION_NVP(m_block_adder);
         ar & BOOST_SERIALIZATION_NVP(m_block_indices);
         ar & BOOST_SERIALIZATION_NVP(m_cache);
-        ar & BOOST_SERIALIZATION_NVP(m_frequencies);
+        //ar & BOOST_SERIALIZATION_NVP(m_frequencies);
         ar & BOOST_SERIALIZATION_NVP(m_pos);
         ar & BOOST_SERIALIZATION_NVP(m_dirty);
     }

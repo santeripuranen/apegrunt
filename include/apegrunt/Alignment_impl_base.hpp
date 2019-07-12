@@ -23,6 +23,8 @@
 #define APEGRUNT_ALIGNMENT_IMPL_BASE_HPP
 
 #include <numeric> // for std::accumulate
+#include <vector>
+#include <memory>  // for std::shared_ptr
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/nvp.hpp>
@@ -57,6 +59,7 @@ public:
 	using distance_matrix_ptr = typename Alignment<state_t>::distance_matrix_ptr;
 
 	using block_index_t = typename Alignment<state_t>::block_index_t;
+	using block_accounting_container_t = typename Alignment<state_t>::block_accounting_container_t;
 	using block_accounting_t = typename Alignment<state_t>::block_accounting_t;
 	using block_accounting_ptr = typename Alignment<state_t>::block_accounting_ptr;
 
@@ -66,6 +69,8 @@ public:
 
 	using block_storage_t = typename Alignment<state_t>::block_storage_t;
 	using block_storage_ptr = typename Alignment<state_t>::block_storage_ptr;
+
+	using block_type = typename Alignment<state_t>::block_type;
 
 	using block_indices_t = typename Alignment<state_t>::block_indices_t;
 	using block_indices_ptr = typename Alignment<state_t>::block_indices_ptr;

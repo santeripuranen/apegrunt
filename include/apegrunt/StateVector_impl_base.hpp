@@ -35,7 +35,7 @@ public:
 	using iterator = typename StateVector<state_t>::iterator;
 	using value_type = typename const_iterator::value_type;
 	using block_type = typename StateVector<state_t>::block_type;
-	using frequencies_type = typename StateVector<state_t>::frequencies_type;
+	//using frequencies_type = typename StateVector<state_t>::frequencies_type;
 	using weight_type = typename StateVector<state_t>::weight_type;
 
 	using block_index_t = typename StateVector<state_t>::block_index_t;
@@ -159,7 +159,7 @@ private:
     block_type get_block_impl( std::size_t index ) const override { return static_cast<const_cast_t>(this)->get_block(index); }
     const block_index_container_t& get_block_indices_impl() const { return static_cast<const_cast_t>(this)->get_block_indices(); }
 
-    const frequencies_type& frequencies_impl() const override { return static_cast<const_cast_t>(this)->frequencies(); }
+    //const frequencies_type& frequencies_impl() const override { return static_cast<const_cast_t>(this)->frequencies(); }
 
     std::size_t size_impl() const override { return static_cast<const_cast_t>(this)->size(); }
     const std::string& id_string_impl() const override { return static_cast<const_cast_t>(this)->id_string(); }
