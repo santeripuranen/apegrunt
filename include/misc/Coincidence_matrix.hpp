@@ -199,12 +199,11 @@ public:
 	{
 		for( std::size_t i=0; i < m_iextent; ++i )
 		{
-			const auto istate = std::size_t( istateblock[i] );
-			const auto data = m_data + N*N*m_jextent*i;
+			const auto data = m_data + N*N*m_jextent*i + std::size_t( istateblock[i] );
 			for( std::size_t j=0; j < m_jextent; ++j )
 			{
 				const auto jstate = std::size_t( jstateblock[j] );
-				*( data + MATRICES_AccessOrder_tag<N>::ptr_increment(jstate,j,m_jextent) + istate ) += weight;
+				*( data + MATRICES_AccessOrder_tag<N>::ptr_increment(jstate,j,m_jextent) ) += weight;
 			}
 		}
 	}
@@ -429,8 +428,9 @@ public:
 		const auto& jblocks = blocks[jblock];
 
 		// block column intersections code
-		const auto intersection = apegrunt::block_list_intersection( block_accounting[iblock], block_accounting[jblock] );
-		const auto intersection_weights = apegrunt::block_list_intersection_weights( intersection, *m_weights );
+		//const auto intersection = apegrunt::block_list_intersection( block_accounting[iblock], block_accounting[jblock] );
+		//const auto intersection_weights = apegrunt::block_list_intersection_weights( intersection, *m_weights );
+		const auto intersection = apegrunt::block_list_intersection_weights( block_accounting[iblock], block_accounting[jblock], *m_weights );
 
 		const auto isize = ( iblock == m_last_block_index ? m_last_block_size : BlockSize );
 		const auto jsize = ( jblock == m_last_block_index ? m_last_block_size : BlockSize );
@@ -442,7 +442,8 @@ public:
 		for( std::size_t i=0; i < intersection.size(); ++i )
 		{
 			const auto& block_indices = intersection.block_pairs[i];
-			wcoincidence_block_kernel.accumulate( iblocks[block_indices.first], jblocks[block_indices.second], intersection_weights[i] );
+			//wcoincidence_block_kernel.accumulate( iblocks[block_indices.first], jblocks[block_indices.second], intersection_weights[i] );
+			wcoincidence_block_kernel.accumulate( iblocks[block_indices.first], jblocks[block_indices.second], intersection.block_pair_weights[i] );
 		}
 	}
 
@@ -459,8 +460,9 @@ public:
 		const auto& jblocks = blocks[jblock];
 
 		// block column intersections code
-		const auto intersection = apegrunt::block_list_intersection( block_accounting[iblock], block_accounting[jblock] );
-		const auto intersection_weights = apegrunt::block_list_intersection_weights( intersection, *m_weights );
+		//const auto intersection = apegrunt::block_list_intersection( block_accounting[iblock], block_accounting[jblock] );
+		//const auto intersection_weights = apegrunt::block_list_intersection_weights( intersection, *m_weights );
+		const auto intersection = apegrunt::block_list_intersection_weights( block_accounting[iblock], block_accounting[jblock], *m_weights );
 
 		Matrix_storage_view<MATRICES_AccessOrder_tag<N>,BlockSize,real_t> wcoincidence_matrix_storage( dest, N*N );
 		auto&& wcoincidence_block_kernel = wcoincidence_matrix_storage.get_weighted_coincidence_single_kernel();
@@ -468,10 +470,12 @@ public:
 
 		const auto ipos_local = ipos%BlockSize;
 		const auto jpos_local = jpos%BlockSize;
+
 		for( std::size_t i=0; i < intersection.size(); ++i )
 		{
 			const auto& block_indices = intersection.block_pairs[i];
-			wcoincidence_block_kernel.accumulate( iblocks[block_indices.first][ipos_local], jblocks[block_indices.second][jpos_local], intersection_weights[i] );
+			//wcoincidence_block_kernel.accumulate( iblocks[block_indices.first][ipos_local], jblocks[block_indices.second][jpos_local], intersection_weights[i] );
+			wcoincidence_block_kernel.accumulate( iblocks[block_indices.first][ipos_local], jblocks[block_indices.second][jpos_local], intersection.block_pair_weights[i] );
 		}
 	}
 
