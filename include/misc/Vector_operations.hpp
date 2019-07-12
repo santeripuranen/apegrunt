@@ -152,7 +152,7 @@ inline Vector<RealT,Capacity> operator/( const Vector<RealT,Capacity,aView>& lhs
 
 // bitshift integer fields in lhs by the amount of steps specified by fields in rhs
 template< typename RealT, std::size_t Capacity, bool View, typename StateT > // should use std::enable_if to drop from overload resolution if not std::is_integral<RealT>::value
-inline Vector<RealT,Capacity> operator<< ( Vector<RealT,Capacity,View> lhs, State_block<StateT,Capacity> rhs )
+inline Vector<RealT,Capacity> operator<< ( const Vector<RealT,Capacity,View>& lhs, const State_block<StateT,Capacity>& rhs )
 {
 	Vector<RealT,Capacity> v;
 	for( std::size_t i = 0; i < Capacity; ++i )
@@ -164,7 +164,7 @@ inline Vector<RealT,Capacity> operator<< ( Vector<RealT,Capacity,View> lhs, Stat
 
 // bitwise AND for array elements
 template< typename RealT, std::size_t Capacity, bool View, bool View2 >
-inline Vector<RealT,Capacity> operator& ( Vector<RealT,Capacity,View> lhs, Vector<RealT,Capacity,View2> rhs )
+inline Vector<RealT,Capacity> operator& ( const Vector<RealT,Capacity,View>& lhs, const Vector<RealT,Capacity,View2>& rhs )
 {
 	Vector<RealT,Capacity> v;
 	for( std::size_t i = 0; i < Capacity; ++i )
@@ -176,7 +176,7 @@ inline Vector<RealT,Capacity> operator& ( Vector<RealT,Capacity,View> lhs, Vecto
 
 // bitwise OR for array elements
 template< typename RealT, std::size_t Capacity, bool View, bool View2 >
-inline Vector<RealT,Capacity> operator| ( Vector<RealT,Capacity,View> lhs, Vector<RealT,Capacity,View2> rhs )
+inline Vector<RealT,Capacity> operator| ( const Vector<RealT,Capacity,View>& lhs, const Vector<RealT,Capacity,View2>& rhs )
 {
 	Vector<RealT,Capacity> v;
 	for( std::size_t i = 0; i < Capacity; ++i )
@@ -187,7 +187,7 @@ inline Vector<RealT,Capacity> operator| ( Vector<RealT,Capacity,View> lhs, Vecto
 }
 
 template< typename RealT, std::size_t Capacity, bool View >
-inline Vector<RealT,Capacity> popcnt_per_element( Vector<RealT,Capacity,View> a )
+inline Vector<RealT,Capacity> popcnt_per_element( const Vector<RealT,Capacity,View>& a )
 {
 	Vector<RealT,Capacity> v;
 	for( std::size_t i = 0; i < Capacity; ++i )
@@ -199,7 +199,7 @@ inline Vector<RealT,Capacity> popcnt_per_element( Vector<RealT,Capacity,View> a 
 }
 
 template< typename RealT, std::size_t Capacity, bool View >
-inline std::size_t popcnt( Vector<RealT,Capacity,View> a )
+inline std::size_t popcnt( const Vector<RealT,Capacity,View>& a )
 {
 	std::size_t s;
 	for( std::size_t i = 0; i < Capacity; ++i )
@@ -208,6 +208,33 @@ inline std::size_t popcnt( Vector<RealT,Capacity,View> a )
 		s += std::bitset<std::numeric_limits<RealT>::digits>(a[i]).count();
 	}
 	return s;
+}
+
+template< typename RealT >
+inline std::size_t popcnt( RealT a )
+{
+	// OK, this is a lazy _and_ slow solution, but it works
+	return std::bitset<std::numeric_limits<RealT>::digits>(a).count();
+}
+
+template< typename RealT, std::size_t Capacity, bool View >
+inline RealT distance2( const Vector<RealT,Capacity,View>& a, const Vector<RealT,Capacity,View>& b )
+{
+	RealT d2(0);
+	//std::cout << "distance2[";
+	for( std::size_t i=0; i < Capacity; ++i )
+	{
+		//std::cout << " " << std::pow( a[i]-b[i], 2 );
+		d2 += std::pow( a[i]-b[i], 2 );
+	}
+	//std::cout << " ]=" << d2 << std::endl;
+	return d2;
+}
+
+template< typename RealT, std::size_t Capacity, bool View >
+inline RealT distance( const Vector<RealT,Capacity,View>& a, const Vector<RealT,Capacity,View>& b )
+{
+	return std::sqrt( distance2(a,b) );
 }
 
 #ifndef NO_INTRINSICS

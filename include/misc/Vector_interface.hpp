@@ -91,6 +91,26 @@ static std::ostream& operator<< ( std::ostream& os, const Vector<uint8_t,Capacit
 	return os;
 }
 
+template< std::size_t Capacity, bool View >
+static std::ostream& operator<< ( std::ostream& os, const Vector<uint32_t,Capacity,View>& v )
+{
+	os << "[";
+	for( std::size_t i=0; i < Capacity; ++i )
+	{
+		/*
+		os << " ";
+		for( std::size_t j=0; j < std::numeric_limits<uint32_t>::digits; ++j )
+		{
+			// let's do binary
+			os << ( ( v[i] & ( uint32_t(1) << j ) ) ? "1" : "0" );
+		}
+		*/
+		os << " " << std::size_t(v[i]);
+	}
+	os << " ]";
+	return os;
+}
+
 template< typename RealT, std::size_t Capacity >
 struct Vector<RealT,Capacity,true>
 {
@@ -103,11 +123,11 @@ struct Vector<RealT,Capacity,true>
 	inline constexpr Vector( my_type&& v ) : m_p( std::move(v.m_p) ), m_stride( std::move(v.m_stride) ) { }
 	inline constexpr Vector( const my_type& v ) : m_p(v.m_p), m_stride(v.m_stride) { }
 	// generic Vector
-	inline my_type& operator=( Vector<RealT,Capacity>&& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] = v.m_elem[i]; } return *this; }
-	inline my_type& operator=( const Vector<RealT,Capacity>& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] = v.m_elem[i]; } return *this; }
+	inline my_type& operator=( Vector<RealT,Capacity>&& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] = v[i]; } return *this; }
+	inline my_type& operator=( const Vector<RealT,Capacity>& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] = v[i]; } return *this; }
 	// my_type
-	inline my_type& operator=( my_type&& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] = v.m_elem[i]; } return *this; }
-	inline my_type& operator=( const my_type& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] = v.m_elem[i]; } return *this; }
+	inline my_type& operator=( my_type&& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] = v[i]; } return *this; }
+	inline my_type& operator=( const my_type& v ) { for( std::size_t i=0; i < N; ++i ) { (*this)[i] = v[i]; } return *this; }
 
 	inline element_t* data() { return m_p; }
 	inline const element_t* data() const { return m_p; }
