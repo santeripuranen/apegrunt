@@ -107,6 +107,7 @@ std::vector< Alignment_ptr<StateT> > get_alignments( std::size_t max_alignments=
 			if( Apegrunt_options::verbose() )
 			{
 				*Apegrunt_options::get_out_stream() << "apegrunt: parse alignment from file \"" << filename << "\"\n";
+				Apegrunt_options::get_out_stream()->flush();
 			}
 			cputimer.start();
 			auto alignment = apegrunt::parse_Alignment< alignment_default_storage_t >( filename );
@@ -117,12 +118,15 @@ std::vector< Alignment_ptr<StateT> > get_alignments( std::size_t max_alignments=
 			}
 			else
 			{
+				cputimer.print_timing_stats(); *Apegrunt_options::get_out_stream() << "\n";
 				alignments.push_back( alignment ); // store the new alignment
+				cputimer.start();
 				if( Apegrunt_options::verbose() )
 				{
-					*Apegrunt_options::get_out_stream() << "apegrunt: got alignment \"" << alignment->id_string() << "\":\n";
+					*Apegrunt_options::get_out_stream() << "apegrunt: statistics for alignment \"" << alignment->id_string() << "\":\n";
 					alignment->statistics( Apegrunt_options::get_out_stream() );
 				}
+				cputimer.stop();
 			}
 			cputimer.print_timing_stats(); *Apegrunt_options::get_out_stream() << "\n";
 		}
@@ -325,8 +329,9 @@ std::vector< std::array< RealT, number_of_states<StateT>::N > > columnwise_frequ
 }
 
 template< typename StateT, typename RealT=double >
-std::vector< std::array< RealT, number_of_states<StateT>::N > > weighted_columnwise_frequencies( const Alignment_ptr<StateT> alignment )
+std::vector< std::array< RealT, number_of_states<StateT>::N > > weighted_columnwise_frequencies( const Alignment_ptr<StateT> alignment, bool sort=false )
 {
+	//std::cout << "apegrunt: weighted_columnwise_frequencies()" << std::endl;
 	using real_t = RealT;
 	enum { N=number_of_states<StateT>::N };
 	using boost::get;
@@ -346,24 +351,35 @@ std::vector< std::array< RealT, number_of_states<StateT>::N > > weighted_columnw
 		}
 	}
 
+	if( sort )
+	{
+		for( auto& f: freq_vec )
+		{
+			std::sort( f.data(), f.data()+N );
+		}
+	}
+
 	return freq_vec;
 }
 
-template< typename IndexT >
+template< typename ContainerT >
 struct block_list_intersection_container
 {
-	std::vector< std::vector<IndexT> > indices;
+	std::vector< ContainerT > indices;
 	std::vector< std::pair<std::size_t, std::size_t> > block_pairs;
 
 	std::size_t size() const { return indices.size(); }
 };
 
-template< typename IndexT >
-block_list_intersection_container<IndexT> block_list_intersection( const std::vector< std::vector<IndexT> >& a, const std::vector< std::vector<IndexT> >& b )
+template< typename ContainerT >
+block_list_intersection_container<ContainerT> block_list_intersection( const std::vector< ContainerT >& a, const std::vector< ContainerT >& b )
 {
 	using std::cbegin; using std::cend; using std::begin;
 
-	block_list_intersection_container<IndexT> intersections;
+	using container_t = ContainerT;
+	using index_t = typename container_t::value_type;
+
+	block_list_intersection_container<container_t> intersections;
 	intersections.indices.reserve( a.size()*b.size() );
 	intersections.block_pairs.reserve( a.size()*b.size() );
 
@@ -374,7 +390,9 @@ block_list_intersection_container<IndexT> block_list_intersection( const std::ve
 		for( std::size_t j=0; j < b.size(); ++j )
 		//for( auto bitr=cbegin(b); bitr != cend(b); ++bitr )
 		{
-			std::vector<IndexT> isect;
+			auto isect = apegrunt::set_intersection( a[i], b[j] );
+/*
+			std::vector<index_t> isect;
 			isect.reserve( std::min(a[i].size(), b[j].size()) ); // can't need more than this, but might be less
 
 			const auto isect_end = std::set_intersection(
@@ -382,6 +400,7 @@ block_list_intersection_container<IndexT> block_list_intersection( const std::ve
 					cbegin(b[j]), cend(b[j]),
 					std::back_inserter(isect)
 			);
+*/
 /*
 			//std::vector<IndexT> isect; isect.reserve( std::min(aitr->size(),bitr->size()) );
 
@@ -412,6 +431,50 @@ std::vector<RealT> block_list_intersection_weights( const block_list_intersectio
 		block_weights.push_back( wsum );
 	}
 	return block_weights;
+}
+
+
+template< typename RealT >
+struct block_list_intersected_weights_container
+{
+	std::vector< std::pair<std::size_t, std::size_t> > block_pairs;
+	std::vector< RealT > block_pair_weights;
+
+	std::size_t size() const { return block_pairs.size(); }
+};
+
+
+template< typename ContainerT, typename RealT >
+block_list_intersected_weights_container<RealT> block_list_intersection_weights( const std::vector< ContainerT >& a, const std::vector< ContainerT >& b, const std::vector<RealT>& sample_weights )
+{
+	using std::cbegin; using std::cend; using std::begin;
+
+	using container_t = ContainerT;
+	using real_t = RealT;
+	using index_t = typename container_t::value_type;
+
+	block_list_intersected_weights_container<real_t> intersections;
+	intersections.block_pairs.reserve( a.size()*b.size() ); // this is the upper limit; actual use could be less
+	intersections.block_pair_weights.reserve( a.size()*b.size() ); // this is the upper limit; actual use could be less
+
+	// going with indexing here instead of iterators, for simpler block pair tracking below
+	for( std::size_t i=0; i < a.size(); ++i )
+	//for( auto aitr=cbegin(a); aitr != cend(a); ++aitr )
+	{
+		for( std::size_t j=0; j < b.size(); ++j )
+		//for( auto bitr=cbegin(b); bitr != cend(b); ++bitr )
+		{
+			//auto isect = apegrunt::set_intersection( a[i], b[j] );
+			auto intersection_weight = apegrunt::intersect_and_gather( a[i], b[j], sample_weights );
+
+			if( intersection_weight != 0 )
+			{
+				intersections.block_pairs.emplace_back( i, j );
+				intersections.block_pair_weights.emplace_back( intersection_weight );
+			}
+		}
+	}
+	return intersections;
 }
 
 template< typename StateT >
