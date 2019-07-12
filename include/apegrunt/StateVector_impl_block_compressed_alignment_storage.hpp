@@ -259,11 +259,11 @@ public:
 		const std::size_t n_indices = std::min( m_block_indices.size(), rhs.m_block_indices.size() ) -1; // "-1": process the last, potentially partially filled block separately
 		if( m_block_storage == rhs.m_block_storage ) // this and rhs belong to the same Alignment
 		{
+			const auto& block_storage = *(m_block_storage.get());
 			for( std::size_t i = 0; i < n_indices; ++i )
 			{
-				n += m_block_indices[i] == rhs.m_block_indices[i] ? N : count_identical( this->get_block(i), rhs.get_block(i) );
-				//if( m_block_indices[i] == rhs.m_block_indices[i] ) { n+=N; } // compare pair indices
-				//else { n += count_identical( this->get_block(i), rhs.get_block(i) ); }
+				// compare pair indices first; count identical states only if needed
+				n += m_block_indices[i] == rhs.m_block_indices[i] ? N : count_identical( block_storage[i][m_block_indices[i]], block_storage[i][rhs.m_block_indices[i]] );
 			}
 		}
 		else
@@ -281,11 +281,43 @@ public:
 		return n;
 	}
 
+	inline bool is_similar_to( const my_type& rhs, std::size_t min_identical ) const
+	{
+		std::size_t n(0);
+
+		const std::size_t n_indices = std::min( m_block_indices.size(), rhs.m_block_indices.size() ) -1; // "-1": process the last, potentially partially filled block separately
+
+		if( m_block_storage == rhs.m_block_storage ) // this and rhs belong to the same Alignment
+		{
+			const auto& block_storage = *(m_block_storage.get());
+			for( std::size_t i = 0; i < n_indices; ++i )
+			{
+				n += m_block_indices[i] == rhs.m_block_indices[i] ? N : count_identical( block_storage[i][m_block_indices[i]], block_storage[i][rhs.m_block_indices[i]] );
+				if( n+(n_indices-i)*N < min_identical ) { return false; } // +1 for the last (it could be partially filled, but we give it the benefit of doubt)
+				else if ( n >= min_identical ) { return true; }
+			}
+		}
+		else
+		{
+			for( std::size_t i = 0; i < n_indices; ++i ) // compare pair indices
+			{
+				n += count_identical( this->get_block(i), rhs.get_block(i) );
+			}
+		}
+		// we should never really reach this point in practice
+		{
+			const auto my_block = this->get_block(n_indices); // last common block
+			const auto rhs_block = rhs.get_block(n_indices); // last common block
+			for( std::size_t i=0; i< std::min(m_pos,rhs.m_pos); ++i ) { my_block[i] == rhs_block[i] && ++n; }
+		}
+		return n > min_identical ? true : false;
+	}
+
 	inline std::size_t size() const { return m_size; }
 
 	inline std::size_t bytesize() const { return apegrunt::bytesize(m_block_indices); }
 
-	inline void report_times() const { std::cout << "parse=" << m_build_timer_parse.elapsed_cycles() << " store=" << m_build_timer_store.elapsed_cycles() << std::endl; }
+	//inline void report_times() const { std::cout << "parse=" << m_build_timer_parse.elapsed_cycles() << " store=" << m_build_timer_store.elapsed_cycles() << std::endl; }
 
 	inline const std::type_info& type() const { return typeid(my_type); }
 /*
@@ -315,8 +347,10 @@ private:
 	std::size_t m_pos;
 	std::size_t m_size;
 	bool m_dirty;
-	stopwatch::stopwatch m_build_timer_parse; // ( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
-	stopwatch::stopwatch m_build_timer_store;
+	//stopwatch::stopwatch m_build_timer_parse; // ( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
+	//stopwatch::stopwatch m_build_timer_store;
+
+	enum { MODULO_MASK=N-1 };
 
 	// Parser interface
 	template< typename T >
@@ -327,6 +361,18 @@ private:
 		if( N == m_pos ) { this->flush_block_buffer(); }
 	}
 
+	template< typename T >
+	inline void push_backN( const T *state )
+	//inline void push_back( const char& state )
+	{
+		for( auto i=0; i < N; ++i )
+		{
+			m_cache[i] = *(state+i);
+		}
+		m_dirty=true; m_pos=N; // m_size+=N;
+		this->flush_block_buffer();
+	}
+
 	inline bool append( const std::string& state_string )
 	{
 		m_block_indices.reserve( m_block_indices.size() + state_string.size()/N + (state_string.size() % N == 0 ? 0 : 1) );
@@ -334,6 +380,23 @@ private:
 		this->flush_block_buffer();
 		return true;
 	}
+
+	inline bool appendN( const std::string& state_string )
+	{
+		const auto Nfull_blocks = state_string.size() / N;
+		const auto Nreminder_chars = state_string.size() & MODULO_MASK;
+
+		m_block_indices.reserve( m_block_indices.size() + Nfull_blocks + (Nreminder_chars ? 1 : 0) );
+		for( auto i=0; i < Nfull_blocks; ++i ) { this->push_backN( state_string.data()+i*N ); }
+		m_size += Nfull_blocks*N;
+		if( Nreminder_chars )
+		{
+			for( auto i=0; i < Nreminder_chars; ++i ) { this->push_back( *(state_string.data()+Nfull_blocks*N+i) ); }
+			this->flush_block_buffer();
+		}
+		return true;
+	}
+
 	void assign( const std::string& state_string )
 	{
 		this->clear();

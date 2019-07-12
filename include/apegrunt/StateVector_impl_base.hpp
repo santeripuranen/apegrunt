@@ -122,6 +122,24 @@ public:
 		return boolvec;
 	}
 
+	inline bool is_similar_to( const StateVector<state_t>& rhs, std::size_t hamming_distance_threshold ) const
+	{
+    	std::cout << "StateVector_impl_base::is_similar_to( const StateVector& rhs ) -- FALLBACK" << std::endl;
+   		using boost::get;
+
+   		std::size_t Npos = std::min( this->size(), rhs.size() );
+		std::size_t N(0), n(0);
+
+		for( auto pair: zip_range( static_cast<const_ref_cast_t>(*this), rhs ) )
+		{
+			++n;
+			get<0>(pair) == get<1>(pair) && ++N;
+			if( N+(Npos-n) < hamming_distance_threshold ) { return false; }
+		}
+
+		return N > hamming_distance_threshold ? true: false;
+	}
+
 private:
 	using derived_type = StateVectorT;
 	using cast_t = derived_type* const;
@@ -200,7 +218,21 @@ private:
     	}
 	}
 
-    const std::type_info& type_impl() const override { return static_cast<const_cast_t>(this)->type(); }
+	bool is_similar_to_impl( const StateVector<state_t>& rhs, std::size_t hamming_distance_threshold ) const override
+	{
+    	if( static_cast<const_ref_cast_t>(*this).type() == rhs.type() )
+    	{
+    		return static_cast<const_ref_cast_t>(*this).is_similar_to( static_cast<const_ref_cast_t>(rhs), hamming_distance_threshold );
+    	}
+    	else
+    	{
+    		// redirect to default implementation in StateVector_impl_base, unless derived_type implements operator&&( const StateVector& rhs )
+    		//return static_cast<const_ref_cast_t>(*this) && rhs;
+    		return this->is_similar_to( rhs, hamming_distance_threshold );
+    	}
+	}
+
+	const std::type_info& type_impl() const override { return static_cast<const_cast_t>(this)->type(); }
 
     //StateVector_subscript_proxy<value_type> subscript_proxy_impl() const override { return static_cast<const_ref_cast_t>(*this).subscript_proxy(); }
 
