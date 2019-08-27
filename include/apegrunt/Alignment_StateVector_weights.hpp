@@ -27,8 +27,6 @@
 #include "misc/Stopwatch.hpp"
 #include "StateVector_forward.h"
 
-#include "misc/VantagePointTree.hpp"
-
 namespace apegrunt {
 
 template< typename StateT, typename RealT=double >
