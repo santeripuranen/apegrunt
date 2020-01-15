@@ -48,34 +48,44 @@ public:
 	enum { NODE_ID_UNFLAG_MASK = ~create_flag_mask<node_id_t>() };
 
 	EdgeID() = delete;
-	inline constexpr EdgeID( node_id_t i, node_id_t j ) : m_i( std::min(i,j) ), m_j( std::max(i,j) ) { }
-	inline constexpr EdgeID( id_t id ) : m_id(id) { }
+	inline EdgeID( node_id_t i, node_id_t j, bool set=false )
+	: m_i( std::min(i,j) & NODE_ID_UNFLAG_MASK ),
+	  m_j( std::max(i,j) & NODE_ID_UNFLAG_MASK )
+	{
+		if(set) { this->set(); }
+	}
+	inline EdgeID( id_t id ) { m_id.store(id); }
 	~EdgeID() = default;
 
-	inline constexpr EdgeID( const my_type& other ) : m_id( other.m_id ) { }
-	inline constexpr EdgeID( my_type&& other ) : m_id( std::move(other.m_id) ) { }
+	inline EdgeID( const my_type& other ) { m_id.store( other.m_id.load() ); }
+	inline EdgeID( my_type&& other ) { m_id.store( other.m_id.load() ); }
 
-	inline constexpr my_type& operator=( const my_type& other ) { m_id = other.m_id; return *this; }
+	inline my_type& operator=( const my_type& other ) { m_id.store(other.m_id.load()); return *this; }
 
-	inline constexpr node_id_t first() const { return m_i & NODE_ID_UNFLAG_MASK; }
-	inline constexpr node_id_t second() const { return m_j & NODE_ID_UNFLAG_MASK; }
-	inline constexpr id_t id() const { return m_id & ID_UNFLAG_MASK; } // return m_id; } // return "m_id & ID_UNFLAG_MASK" if flag not desired
+	inline node_id_t first() const { return m_i & NODE_ID_UNFLAG_MASK; }
+	inline node_id_t second() const { return m_j & NODE_ID_UNFLAG_MASK; }
+	inline id_t id() const { return m_id.load() & ID_UNFLAG_MASK; }
 
-	inline constexpr operator bool() const { return m_id & ID_FLAG_MASK; }
-	inline constexpr void set() { m_id = m_id | ID_FLAG_MASK; }
-	inline constexpr void unset() { m_id = m_id & ID_UNFLAG_MASK; }
+	inline operator bool() const { return m_id.load() & ID_FLAG_MASK; }
+	inline bool is_set() const { return bool(*this); }
+	inline void set() { m_id.fetch_or(ID_FLAG_MASK); }
+	inline void unset() { m_id.fetch_and(ID_UNFLAG_MASK); }
 
-	inline constexpr bool operator==( const my_type& rhs ) const { return this->id() == rhs.id(); }
-	inline constexpr bool operator<( const my_type& rhs ) const { return this->id() < rhs.id(); }
+	inline bool operator==( const my_type& rhs ) const { return this->id() == rhs.id(); }
+	inline bool operator<( const my_type& rhs ) const { return this->id() < rhs.id(); }
+	inline bool operator!=( const my_type& rhs ) const { return this->id() != rhs.id(); }
 
 private:
+	using node_id_intl_t = node_id_t;
+	using id_intl_t = std::atomic<id_t>;
+
 	union
 	{
 		struct {
-			node_id_t m_i;
-			node_id_t m_j; // we use sign as flag bit
+			node_id_intl_t m_i;
+			node_id_intl_t m_j; // we use sign as flag bit
 		};
-		id_t m_id;
+		id_intl_t m_id;
 	};
 };
 
@@ -95,24 +105,24 @@ public:
 	using my_type = Edge;
 
 	Edge() = delete;
-	inline constexpr Edge( node_id_t i, node_id_t j, real_t w ) : m_id(i,j), m_w(w) { }
+	inline Edge( node_id_t i, node_id_t j, real_t w ) : m_id(i,j), m_w(w) { }
 	~Edge() = default;
 
-	inline constexpr Edge( const my_type& other ) : m_id( other.m_id ), m_w( other.m_w ) { }
-	inline constexpr Edge( my_type&& other ) : m_id( std::move(other.m_id) ), m_w( std::move(other.m_w) ) { }
+	inline Edge( const my_type& other ) : m_id( other.m_id ), m_w( other.m_w ) { }
+	inline Edge( my_type&& other ) : m_id( std::move(other.m_id) ), m_w( std::move(other.m_w) ) { }
 
-	inline constexpr my_type& operator=( const my_type& rhs ) { m_id = rhs.m_id; m_w = rhs.m_w; return *this; }
+	inline my_type& operator=( const my_type& rhs ) { m_id = rhs.m_id; m_w = rhs.m_w; return *this; }
 
-	inline constexpr id_t id() const { return m_id; }
-	inline constexpr typename id_t::node_id_t node1() const { return m_id.first(); }
-	inline constexpr typename id_t::node_id_t node2() const { return m_id.second(); }
-	inline constexpr real_t weight() const { return m_w; }
-	inline constexpr operator bool() const { return bool(m_id); }
-	inline constexpr void set() { m_id.set(); }
-	inline constexpr void unset() { m_id.unset(); }
+	inline id_t id() const { return m_id; }
+	inline typename id_t::node_id_t node1() const { return m_id.first(); }
+	inline typename id_t::node_id_t node2() const { return m_id.second(); }
+	inline real_t weight() const { return m_w; }
+	inline operator bool() const { return bool(m_id); }
+	inline void set() { m_id.set(); }
+	inline void unset() { m_id.unset(); }
 
-	inline constexpr bool operator==( const my_type& rhs ) const { return m_id == rhs.m_id; }
-	inline constexpr bool operator<( const my_type& rhs ) const { return m_id < rhs.m_id; }
+	inline bool operator==( const my_type& rhs ) const { return m_id == rhs.m_id; }
+	inline bool operator<( const my_type& rhs ) const { return m_id < rhs.m_id; }
 
 private:
 	id_t m_id;
