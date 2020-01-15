@@ -27,6 +27,7 @@
 #include <cmath>
 #include <mutex> // for std::mutex
 #include <limits>
+#include <atomic>
 
 #include "Graph_forward.h"
 #include "apegrunt/Apegrunt_utility.hpp"
