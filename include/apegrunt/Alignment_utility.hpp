@@ -41,6 +41,7 @@
 #include "Alignment_StateVector_weights.hpp"
 
 #include "Loci_parsers.hpp"
+#include "Loci_generators.hpp"
 #include "State_block.hpp"
 
 #include "ValueVector_parser.hpp"
@@ -281,6 +282,38 @@ void output_sample_weights( Alignment_ptr<StateT> alignment )
 		}
 	}
 }
+
+template< typename StateT >
+void output_alignment( Alignment_ptr<StateT> alignment, bool output_indices=true )
+{
+	// init timer
+	stopwatch::stopwatch cputimer( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
+
+	cputimer.start();
+
+	// output alignment
+	auto alignment_file = apegrunt::get_unique_ofstream( alignment->id_string()+"."+apegrunt::size_string(alignment)+"."+"fasta" );
+	if( Apegrunt_options::verbose() )
+	{
+		*Apegrunt_options::get_out_stream() << "apegrunt: write alignment to file " << alignment_file->name() << "\n";
+	}
+	apegrunt::generate_Alignment( alignment, alignment_file->stream() );
+
+	// output loci list
+	if( output_indices )
+	{
+		auto locilist_file = apegrunt::get_unique_ofstream( alignment->id_string()+"."+apegrunt::size_string(alignment)+".loci"  );
+		if( Apegrunt_options::verbose() )
+		{
+			*Apegrunt_options::get_out_stream() << "apegrunt: write original loci indices to file " << locilist_file->name() << "\n";
+		}
+		apegrunt::generate_Loci_list( alignment->get_loci_translation(), locilist_file->stream() );
+	}
+
+	cputimer.stop();
+	if( Apegrunt_options::verbose() ) { cputimer.print_timing_stats(); *Apegrunt_options::get_out_stream() << "\n"; }
+}
+
 
 template< typename StateT >
 std::vector< std::array< std::size_t, number_of_states<StateT>::N > > allele_occurrence( const Alignment_ptr<StateT> alignment )
