@@ -22,6 +22,7 @@
 #define APEGRUNT_GRAPH_UTILITY_HPP
 
 #include <vector>
+#include <unordered_set>
 #include <algorithm>
 
 #include "graph/Graph.hpp"
@@ -40,8 +41,31 @@ Loci_ptr extract_set_node_indices( const Graph_ptr& graph )
 			indices.push_back( edge.node1() );
 			indices.push_back( edge.node2() );
 		}
-		std::sort( indices.begin(), indices.end(), std::less<std::size_t>() );
 	}
+	std::sort( indices.begin(), indices.end(), std::less<std::size_t>() );
+	auto end = std::unique( indices.begin(), indices.end() );
+	indices.erase( end, indices.end() );
+	indices.shrink_to_fit();
+
+	return apegrunt::make_Loci_list(std::move(indices),0);
+}
+
+template< typename UnaryPredicate >
+Loci_ptr extract_threshold_node_indices( const Graph_ptr& graph, UnaryPredicate p )
+{
+	std::vector<std::size_t> indices;
+	for( const auto& edge: *graph )
+	{
+		if( p(edge.weight()) )
+		{
+			indices.push_back( edge.node1() );
+			indices.push_back( edge.node2() );
+		}
+	}
+	std::sort( indices.begin(), indices.end(), std::less<std::size_t>() );
+	auto end = std::unique( indices.begin(), indices.end() );
+	indices.erase( end, indices.end() );
+	indices.shrink_to_fit();
 
 	return apegrunt::make_Loci_list(std::move(indices),0);
 }
