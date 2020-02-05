@@ -1,6 +1,6 @@
 /** @file Apegrunt_options.cpp
 
-	Copyright (c) 2016-2019 Santeri Puranen.
+	Copyright (c) 2016-2020 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -81,6 +81,8 @@ const std::string Apegrunt_options_base::s_version_string(
 	"AVX2"
 #elif __AVX__
 	"AVX"
+#elif __SSE3__
+	"SSE3"
 #elif __SSE2__
 	"SSE2"
 #else
@@ -90,12 +92,12 @@ const std::string Apegrunt_options_base::s_version_string(
 );
 
 const std::string Apegrunt_options_base::s_copyright_notice(
-	std::string("Copyright (c) 2016-2019 Santeri Puranen\nLicensed under the GNU Affero General Public License version 3.\n\n")
+	std::string("Copyright (c) 2016-2020 Santeri Puranen\nLicensed under the GNU Affero General Public License version 3.\n\n")
 	+ "THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND."
 );
 
 const std::string Apegrunt_options_base::s_long_copyright_notice(
-	std::string("Copyright (c) 2016-2019 Santeri Puranen\nLicensed under the GNU Affero General Public License version 3.\n\n")
+	std::string("Copyright (c) 2016-2020 Santeri Puranen\nLicensed under the GNU Affero General Public License version 3.\n\n")
 	+ "This program is free software: you can redistribute it and/or modify\n"
 	+ "it under the terms of the GNU Affero General Public License version 3 as\n"
 	+ "published by the Free Software Foundation.\n\n"
@@ -129,6 +131,8 @@ bool Apegrunt_options_base::s_output_sample_weights = false;
 bool Apegrunt_options_base::s_no_sample_reweighting = false;
 bool Apegrunt_options_base::s_rescale_sample_weights = false;
 bool Apegrunt_options_base::s_output_sample_distance_matrix = false;
+bool Apegrunt_options_base::s_output_alignment = false;
+bool Apegrunt_options_base::s_output_filtered_alignment = false;
 
 std::size_t Apegrunt_options_base::s_genome_size = 0;
 bool Apegrunt_options_base::s_linear_genome = false;
@@ -204,6 +208,8 @@ bool Apegrunt_options_base::reweight_samples() { return !s_no_sample_reweighting
 bool Apegrunt_options_base::rescale_sample_weights() { return s_rescale_sample_weights; }
 bool Apegrunt_options_base::output_sample_weights() { return s_output_sample_weights; }
 bool Apegrunt_options_base::output_sample_distance_matrix() { return s_output_sample_distance_matrix; }
+bool Apegrunt_options_base::output_alignment() { return s_output_alignment; }
+bool Apegrunt_options_base::output_filtered_alignment() { return s_output_filtered_alignment; }
 
 std::size_t Apegrunt_options_base::genome_size() { return s_genome_size; }
 bool Apegrunt_options_base::linear_genome() { return s_linear_genome; }
@@ -281,6 +287,8 @@ void Apegrunt_options_base::m_init()
 		("output-sample-weights", po::bool_switch( &Apegrunt_options_base::s_output_sample_weights )->default_value(Apegrunt_options_base::s_output_sample_weights)->notifier(Apegrunt_options_base::s_init_output_sample_weights), "Output sample weights.")
 		("output-sample-distance-matrix", po::bool_switch( &Apegrunt_options_base::s_output_sample_distance_matrix )->default_value(Apegrunt_options_base::s_output_sample_distance_matrix)->notifier(Apegrunt_options_base::s_init_output_sample_distance_matrix), "Output triangular sample-sample Hamming distance matrix.")
 		("output-indexing-base", po::value< std::size_t >( &Apegrunt_options_base::s_output_indexing_base )->default_value(Apegrunt_options_base::s_output_indexing_base)->notifier(Apegrunt_options_base::s_init_output_indexing_base), "Base index for output." )
+		("output-alignment", po::bool_switch( &Apegrunt_options::s_output_alignment )->default_value(Apegrunt_options::s_output_alignment)->notifier(Apegrunt_options::s_init_output_alignment), "Write alignment to file.")
+		("output-filtered-alignment", po::bool_switch( &Apegrunt_options::s_output_filtered_alignment )->default_value(Apegrunt_options::s_output_filtered_alignment)->notifier(Apegrunt_options::s_init_output_filtered_alignment), "Write filtered alignment to file.")
 
 		("genome-size", po::value< std::size_t >( &Apegrunt_options_base::s_genome_size )->notifier(Apegrunt_options_base::s_init_genome_size), "Genome size, if different from input. Default = 0: detect size from input.")
 		("linear-genome", po::bool_switch( &Apegrunt_options_base::s_linear_genome )->default_value(Apegrunt_options_base::s_linear_genome)->notifier(Apegrunt_options_base::s_init_linear_genome), "Assume linear genome in distance calculations.")
@@ -432,6 +440,22 @@ void Apegrunt_options_base::s_init_output_sample_distance_matrix( bool flag )
 	if( flag && s_verbose && s_out )
 	{
 		*s_out << "apegrunt: output triangular sample-sample Hamming distance matrix to file.\n";
+	}
+}
+
+void Apegrunt_options_base::s_init_output_alignment( const bool& flag )
+{
+	if( flag && s_verbose && s_out )
+	{
+		*s_out << "apegrunt: output alignment to file.\n";
+	}
+}
+
+void Apegrunt_options_base::s_init_output_filtered_alignment( const bool& flag )
+{
+	if( flag && s_verbose && s_out )
+	{
+		*s_out << "apegrunt: output filtered alignment to file.\n";
 	}
 }
 

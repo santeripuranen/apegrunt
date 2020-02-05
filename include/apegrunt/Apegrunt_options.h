@@ -1,6 +1,6 @@
 	/** @file Apegrunt_options.h
 
-	Copyright (c) 2016-2017 Santeri Puranen.
+	Copyright (c) 2016-2020 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -97,6 +97,8 @@ public:
 	static bool output_state_frequencies();
 	static bool output_sample_weights();
 	static bool output_sample_distance_matrix();
+	static bool output_alignment();
+	static bool output_filtered_alignment();
 
 	// Alignment processing
 	static bool filter_alignment();
@@ -155,6 +157,8 @@ private:
 	static bool s_no_sample_reweighting;
 	static bool s_rescale_sample_weights;
 	static bool s_output_sample_distance_matrix;
+	static bool s_output_alignment;
+	static bool s_output_filtered_alignment;
 
 	static std::size_t s_genome_size;
 	static bool s_linear_genome;
@@ -205,6 +209,8 @@ private:
 	static void s_init_sample_reweighting_threshold( double threshold );
 	static void s_init_output_sample_weights( bool flag );
 	static void s_init_output_sample_distance_matrix( bool flag );
+	static void s_init_output_alignment( const bool& flag );
+	static void s_init_output_filtered_alignment( const bool& flag );
 	static void s_init_genome_size( std::size_t npositions );
 	static void s_init_linear_genome( bool flag );
 	static void s_init_variable_penalty( bool flag );
