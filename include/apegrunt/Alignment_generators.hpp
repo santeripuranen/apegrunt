@@ -83,7 +83,7 @@ bool generate_PhandangoCSV( Alignment_ptr<StateT> alignment, std::ostream* outst
 	}
 	return false;
 }
-
+/*
 template< typename StateT >
 bool generate_AG_Alignment( apegrunt::Alignment_ptr<StateT> alignment, std::ostream* outstream )
 {
@@ -96,7 +96,7 @@ bool generate_AG_Alignment( apegrunt::Alignment_ptr<StateT> alignment, std::ostr
 		std::size_t sid=0;
 		for( const auto& sequence: alignment )
 		{
-			*outstream << "<i id=\"" << sid /*seqid_hasher( sequence->id_string() )*/ << "\" w=\"" << sequence->weight() << "\">"
+			*outstream << "<i id=\"" << sid << "\" w=\"" << sequence->weight() << "\">"
 					<< sequence->id_string()
 					<< "</i>"
 			;
@@ -170,7 +170,7 @@ bool generate_AG_Alignment( apegrunt::Alignment_ptr<StateT> alignment, std::ostr
 	}
 	return false;
 }
-
+*/
 /*
 // Boost Spirit Karma generator
 template< typename StateT >
