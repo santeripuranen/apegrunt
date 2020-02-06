@@ -27,7 +27,7 @@ struct Apegrunt_version
 {
 	static const int s_MajorVersion = 0; // substantial rewrite
 	static const int s_MinorVersion = 4; // feature change
-	static const int s_SubminorVersion = 0; // bugfix, small enhancement
+	static const int s_SubminorVersion = 2; // bugfix, small enhancement
 };
 
 } // namespace apegrunt
