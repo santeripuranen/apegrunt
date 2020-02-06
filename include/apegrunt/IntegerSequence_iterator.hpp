@@ -1,22 +1,19 @@
 /** @file IntegerSequence_iterator.hpp
  
-	Copyright (c) 2016-2019 Santeri Puranen. All rights reserved.
- 
-	By installing, copying or otherwise using the attached
-	material ("product" or "software") you acknowledge and
-	agree that the attached	material contains proprietary
-	information of the copyright holder(s). Any use of the
-	material is prohibited except as expressly agreed between
-	the copyright holder(s) and the recipient.
- 
-	THIS PRODUCT ("SOFTWARE") IS PROVIDED "AS IS", WITHOUT WARRANTY
-	OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
-	THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
-	PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
-	COPYRIGHT HOLDER(S) BE LIABLE FOR ANY DAMAGES OR OTHER LIABILITY,
-	WHETHER IN CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-	IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-	THE SOFTWARE.
+	Copyright (c) 2016-2020 Santeri Puranen.
+
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU Affero General Public License as
+	published by the Free Software Foundation, either version 3 of the
+	License, or (at your option) any later version.
+
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+	GNU Affero General Public License for more details.
+
+	You should have received a copy of the GNU Affero General Public License
+	along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 	@author Santeri Puranen
 	$Id: $
@@ -56,7 +53,7 @@ struct IntegerSequence_const_iterator
     inline pointer operator->() { return &m_currpos; }
 	inline void operator++() { m_currpos = (*(++m_pos))(); }
 
-    inline bool operator==( const my_type& rhs ) const { return rhs.m_pos == m_pos; } // this is wrong if *m_pos is not a simple integer
+    inline bool operator==( const my_type& rhs ) const { return rhs.m_pos == m_pos; }
     inline bool operator<( const my_type& rhs ) const { return m_currpos < rhs.m_currpos; }
 
 	const range_type *m_pos;
@@ -82,6 +79,7 @@ struct back_insert_iterator
 
 	back_insert_iterator() = delete;
 	back_insert_iterator( container_t& container ) : m_container(container) { }
+	back_insert_iterator( const my_type& other ) : m_container( other.m_container ) { }
 
 	constexpr back_insert_iterator( const my_type& other, container_t& new_container )
 	: m_container( new_container )

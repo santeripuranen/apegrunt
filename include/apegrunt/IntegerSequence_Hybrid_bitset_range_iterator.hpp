@@ -1,22 +1,19 @@
 /** @file IntegerSequence_Hybrid_bitset_range_iterator.hpp
  
-	Copyright (c) 2018-2019 Santeri Puranen. All rights reserved.
- 
-	By installing, copying or otherwise using the attached
-	material ("product" or "software") you acknowledge and
-	agree that the attached	material contains proprietary
-	information of the copyright holder(s). Any use of the
-	material is prohibited except as expressly agreed between
-	the copyright holder(s) and the recipient.
- 
-	THIS PRODUCT ("SOFTWARE") IS PROVIDED "AS IS", WITHOUT WARRANTY
-	OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
-	THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
-	PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
-	COPYRIGHT HOLDER(S) BE LIABLE FOR ANY DAMAGES OR OTHER LIABILITY,
-	WHETHER IN CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-	IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-	THE SOFTWARE.
+	Copyright (c) 2018-2020 Santeri Puranen.
+
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU Affero General Public License as
+	published by the Free Software Foundation, either version 3 of the
+	License, or (at your option) any later version.
+
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+	GNU Affero General Public License for more details.
+
+	You should have received a copy of the GNU Affero General Public License
+	along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 	@author Santeri Puranen
 	$Id: $
@@ -43,7 +40,7 @@ struct IntegerSequence_const_iterator< Hybrid_bitset_range_element<IndexT,true> 
 	using range_type = Hybrid_bitset_range_element<index_t,true>;
 
 	// std::iterator requirements
-	using value_type = typename range_type::index_t;
+	using value_type = typename range_type::value_type;
 	using reference = const value_type&; // only const access, since value_type is a proxy
 	using pointer = const value_type*; // only const access, since value_type is a proxy
 	//using iterator_category = std::random_access_iterator_tag;
@@ -68,6 +65,16 @@ struct IntegerSequence_const_iterator< Hybrid_bitset_range_element<IndexT,true> 
 		}
 	}
 	~IntegerSequence_const_iterator() = default;
+
+	inline my_type& operator=( const my_type& other )
+	{
+		m_pos = other.m_pos;
+		m_end = other.m_end;
+		m_currpos = other.m_currpos;
+		m_mode = other.m_mode;
+
+		return *this;
+	}
 
 	inline reference operator*() { return m_currpos; }
     inline pointer operator->() { return &m_currpos; }
@@ -116,11 +123,12 @@ struct IntegerSequence_const_iterator< Hybrid_bitset_range_element<IndexT,true> 
 
     inline bool advance_and_test() noexcept { ++m_currpos; return ( m_bitstring = m_bitstring >> 1 ) & 1; }
 
-	index_t m_currpos;
+	value_type m_currpos;
 	index_t m_bitstring;
 	uint_fast8_t m_mode;
     const range_type *m_pos;
-	const range_type * const m_end;
+	//const range_type * const m_end;
+	const range_type * m_end;
 };
 
 // specialize back_insert_iterator for Hybrid_bitset_range_element
@@ -132,60 +140,104 @@ struct back_insert_iterator< std::vector< Hybrid_bitset_range_element<IndexT,tru
 {
 	using container_t = std::vector< Hybrid_bitset_range_element<IndexT,true> >;
 	using value_type = typename container_t::value_type;
-	using index_t = typename value_type::index_t;
+	using index_t = typename value_type::value_type;
 	using my_type = back_insert_iterator<container_t>;
 
 	back_insert_iterator() = delete;
-	back_insert_iterator( container_t& container ) : m_container(container), m_bitfield_mode(false), m_is_contiguous(false) { }
+	back_insert_iterator( container_t& container ) : m_container(container), /*m_elements(0),*/ m_bitfield_mode(false), m_is_contiguous(false) { }
 	~back_insert_iterator() = default;
 
 	constexpr back_insert_iterator( const my_type& other )
 	: m_container( other.m_container ),
-	  m_bitfield_mode( other.m_bitfield_mode ),
-	  m_is_contiguous( other.m_is_contiguous )
-	{ }
-
-	constexpr back_insert_iterator( const my_type& other, container_t& new_container )
-	: m_container( new_container ),
+	  //m_elements( other.m_elements ),
 	  m_bitfield_mode( other.m_bitfield_mode ),
 	  m_is_contiguous( other.m_is_contiguous )
 	{ }
 
 	constexpr back_insert_iterator( my_type&& other )
-	: m_container( other.m_container ), // we don't want to move the container, since it's not owned by us
+	: m_container( other.m_container ), // we don't want to move the container, since we only hold it by reference
+	  //m_elements( other.m_elements ),
 	  m_bitfield_mode( std::move(other.m_bitfield_mode) ),
 	  m_is_contiguous( std::move(other.m_is_contiguous) )
 	{ }
 
-	inline my_type& operator=( const index_t& value )
+	constexpr back_insert_iterator( const my_type& other, container_t& new_container )
+	: m_container( new_container ),
+	  //m_elements( other.m_elements ),
+	  m_bitfield_mode( other.m_bitfield_mode ),
+	  m_is_contiguous( other.m_is_contiguous )
+	{ }
+
+	inline my_type& operator=( const my_type& other )
+	{
+		m_container = other.m_container;
+		//m_elements = other.m_elements;
+		m_bitfield_mode = other.m_bitfield_mode;
+		m_is_contiguous = other.m_is_contiguous;
+		return *this;
+	}
+
+	inline my_type& operator=( my_type&& other )
+	{
+		m_container = other.m_container;
+		//m_elements = other.m_elements;
+		m_bitfield_mode = std::move(other.m_bitfield_mode);
+		m_is_contiguous = std::move(other.m_is_contiguous);
+		return *this;
+	}
+
+	inline my_type& reset( const my_type& other, container_t& new_container )
+	{
+		m_container = new_container;
+		//m_elements = other.m_elements;
+		m_bitfield_mode = other.m_bitfield_mode;
+		m_is_contiguous = other.m_is_contiguous;
+		return *this;
+	}
+
+	inline my_type& operator=( index_t value )
 	{
 		switch(m_bitfield_mode)
 		{
 		case true: // fill bitset
+			//std::cout << "set(" << value << ")=";
 			if( m_container.back().set(value) )
 			{
+				//std::cout << "true(" << m_container.back().get_bitfield() << ")";
 				if( m_container.back().all_set() ) // is our bitset a contiguous range (from m_container.back()() to value)?
 				{
-					if( m_is_contiguous ) // were we already previously in a contiguous range?
+					//std::cout << " -- all set";
+					if( m_is_contiguous ) // are we already in a contiguous range?
 					{
-						// ..then remove the bitset element and extend the range (below)
+						// ..then remove the bitset element and extend the existing range (below)
 						m_container.pop_back();
+						//--m_elements;
 					}
 					else // we were not previously in a contiguous range
 					{
 						// ..but we are now!
 						m_is_contiguous = true;
 					}
-					m_container.back().set_range_end(value); // update range end value
+					m_container.back().set_range_end(value+1); // end == past-the-end
+					//std::cout << " | range[" << m_container.back()() << "," << m_container.back().range_end() << ")";
 					m_bitfield_mode = false; // switch back to new bitfield insertion mode
 				}
+				//std::cout << std::endl;
 				break;
 			}
+			//std::cout << "false" << std::endl;
 			m_is_contiguous = false; // we can no longer extend a contiguous range
-			// fall through to default
+			// no break == fall through to default
 
 		default: // insert new bitset range element
-			m_container.push_back(value); // range begin value
+			if( m_is_contiguous && (value != m_container.back().range_end()) )
+			{
+				//std::cout << "value=" << value << " range_end()=" << m_container.back().range_end() << std::endl;
+				m_is_contiguous = false;
+			}
+			//m_container.push_back(value); // range begin value
+			m_container.emplace_back(value); // range begin value
+			//++m_elements;
 
 			m_bitfield_mode = true; // switch to bitset fill mode
 			break;
@@ -195,6 +247,7 @@ struct back_insert_iterator< std::vector< Hybrid_bitset_range_element<IndexT,tru
 	}
 
 	container_t& m_container;
+	//uint m_elements;
 	bool m_bitfield_mode;
 	bool m_is_contiguous;
 };

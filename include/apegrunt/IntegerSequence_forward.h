@@ -1,6 +1,6 @@
 /** @file IntegerSequence_forward.h
 
-	Copyright (c) 2016-2019 Santeri Puranen. All rights reserved.
+	Copyright (c) 2016-2020 Santeri Puranen. All rights reserved.
 
 	By installing, copying or otherwise using the attached
 	material ("product" or "software") you acknowledge and
@@ -41,6 +41,12 @@ IntegerSequence_ptr< typename IntegerSequenceT::value_type > make_IntegerSequenc
 {
 	return std::make_shared< IntegerSequenceT >( args... );
 }
+
+template< typename T > struct hash;
+template< typename SequenceT > struct hash< IntegerSequence< SequenceT > >;
+
+template< typename T > struct equal_to;
+template< typename SequenceT > struct equal_to< IntegerSequence< SequenceT > >;
 
 } // namespace apegrunt
 

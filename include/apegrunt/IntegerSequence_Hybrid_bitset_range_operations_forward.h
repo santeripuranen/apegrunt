@@ -1,22 +1,19 @@
 /** @file IntegerSequence_Hybrid_bitset_range_operations_forward.h
 
-	Copyright (c) 2018-2019 Santeri Puranen. All rights reserved.
+	Copyright (c) 2018-2020 Santeri Puranen.
 
-	By installing, copying or otherwise using the attached
-	material ("product" or "software") you acknowledge and
-	agree that the attached	material contains proprietary
-	information of the copyright holder(s). Any use of the
-	material is prohibited except as expressly agreed between
-	the copyright holder(s) and the recipient.
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU Affero General Public License as
+	published by the Free Software Foundation, either version 3 of the
+	License, or (at your option) any later version.
 
-	THIS PRODUCT ("SOFTWARE") IS PROVIDED "AS IS", WITHOUT WARRANTY
-	OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
-	THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
-	PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT SHALL THE
-	COPYRIGHT HOLDER(S) BE LIABLE FOR ANY DAMAGES OR OTHER LIABILITY,
-	WHETHER IN CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-	IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-	THE SOFTWARE.
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+	GNU Affero General Public License for more details.
+
+	You should have received a copy of the GNU Affero General Public License
+	along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 	@author Santeri Puranen
 	$Id: $
@@ -27,6 +24,7 @@
 
 #include <ostream>
 #include <vector>
+#include <functional> // for std::reference_wrapper
 
 #include "IntegerSequence_forward.h"
 #include "IntegerSequence_operations_forward.h"
@@ -40,14 +38,35 @@ std::ostream& operator<< ( std::ostream& os, const IntegerSequence< Hybrid_bitse
 template< typename IndexT >
 std::ostream& operator<< ( std::ostream& os, const IntegerSequence< Hybrid_bitset_range_element<IndexT,true> >& container );
 
-template< typename IndexT, bool Aligned >
-IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> > set_intersection( const IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> >& a, const IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> >& b );
+template< typename IndexT, bool Aligned=true >
+Hybrid_bitset_sequence<IndexT,Aligned> set_intersection( const Hybrid_bitset_sequence<IndexT,Aligned>& a, const Hybrid_bitset_sequence<IndexT,Aligned>& b );
+
+template< typename IndexT >
+Hybrid_bitset_sequence<IndexT,true> set_intersection( const Hybrid_bitset_sequence<IndexT,true>& a, const Hybrid_bitset_sequence<IndexT,true>& b );
 
 template< typename IndexT, typename RealT, bool Aligned=true >
-RealT intersect_and_gather( const IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> >& a, const IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> >& b, const std::vector<RealT>& weights );
+RealT intersect_and_gather( const Hybrid_bitset_sequence<IndexT,Aligned>& a, const Hybrid_bitset_sequence<IndexT,Aligned>& b, const std::vector<RealT>& weights );
 
 template< typename IndexT, typename RealT >
-RealT intersect_and_gather( const IntegerSequence< Hybrid_bitset_range_element<IndexT,true> >& a, const IntegerSequence< Hybrid_bitset_range_element<IndexT,true> >& b, const std::vector<RealT>& weights );
+RealT intersect_and_gather( const Hybrid_bitset_sequence<IndexT,true>& a, const Hybrid_bitset_sequence<IndexT,true>& b, const std::vector<RealT>& weights );
+
+template< typename IndexT, bool Aligned=true >
+Hybrid_bitset_sequence<IndexT,Aligned> set_union( const Hybrid_bitset_sequence<IndexT,Aligned>& a, const Hybrid_bitset_sequence<IndexT,Aligned>& b );
+
+template< typename IndexT >
+Hybrid_bitset_sequence<IndexT,true> set_union( const Hybrid_bitset_sequence<IndexT,true>& a, const Hybrid_bitset_sequence<IndexT,true>& b );
+
+template< typename IndexT, bool Aligned=true >
+Hybrid_bitset_sequence<IndexT,Aligned> set_union( const std::vector< std::reference_wrapper< const Hybrid_bitset_sequence<IndexT,Aligned> > >& sets );
+
+template< typename IndexT >
+Hybrid_bitset_sequence<IndexT,true> set_union( const std::vector< std::reference_wrapper< const Hybrid_bitset_sequence<IndexT,true> > >& sets );
+
+template< typename IndexT, bool Aligned >
+struct hash< Hybrid_bitset_sequence<IndexT,Aligned> >;
+
+template< typename IndexT, bool Aligned >
+struct equal_to< Hybrid_bitset_sequence<IndexT,Aligned> >;
 
 } // namespace apegrunt
 
