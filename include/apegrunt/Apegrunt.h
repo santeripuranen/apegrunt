@@ -23,9 +23,21 @@
 #ifndef APEGRUNT_H
 #define APEGRUNT_H
 
+#ifndef APEGRUNT_NO_TBB // Threading with Threading Building Blocks
+#include "tbb/tbb_stddef.h"
+#include "tbb/task_scheduler_init.h"
+#endif // #ifndef APEGRUNT_NO_TBB
+
 #include "Apegrunt_options.h"
+#include "Apegrunt_utility.hpp"
+
 #include "Alignment.h"
 #include "Alignment_parsers.hpp"
 #include "Alignment_generators.hpp"
+#include "Alignment_impl_block_compressed_storage.hpp"
+#include "StateVector_impl_block_compressed_alignment_storage.hpp"
+#include "Alignment_utility.hpp"
+#include "Apegrunt_IO_misc.hpp"
+#include "ValueVector_parser.hpp"
 
 #endif // APEGRUNT_H

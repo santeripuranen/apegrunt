@@ -25,6 +25,7 @@
 #include "Loci_forward.h"
 #include "Loci_interface.hpp"
 #include "Loci_iterator.hpp"
+#include "Loci_operations.hpp"
 
 #endif // APEGRUNT_LOCI_H
 

@@ -35,20 +35,27 @@ public:
 	using iterator = typename StateVector<state_t>::iterator;
 	using value_type = typename const_iterator::value_type;
 	using block_type = typename StateVector<state_t>::block_type;
-	using frequencies_type = typename StateVector<state_t>::frequencies_type;
+	//using frequencies_type = typename StateVector<state_t>::frequencies_type;
+	using weight_type = typename StateVector<state_t>::weight_type;
+
+	using block_index_t = typename StateVector<state_t>::block_index_t;
+	using block_index_container_t = typename StateVector<state_t>::block_index_container_t;
 
 	enum { block_size = block_type::N };
 
-	StateVector_impl_base() : m_multiplicity(1) { }
-	~StateVector_impl_base() override = default;
+	StateVector_impl_base() : m_multiplicity(1), m_weight(1) { }
+	virtual ~StateVector_impl_base() = default;
 
-	StateVector_impl_base( const std::string& id_string, std::size_t multiplicity=1 ) : m_multiplicity(multiplicity), m_id_string(id_string) { }
+	StateVector_impl_base( const std::string& id_string, std::size_t multiplicity=1, weight_type weight=1 ) : m_multiplicity(multiplicity), m_weight(weight), m_id_string(id_string) { }
 
 	const std::string& id_string() const { return m_id_string; }
 	void set_id_string( const std::string& id_string ) { m_id_string = id_string; }
 
 	std::size_t multiplicity() const { return m_multiplicity; }
 	void set_multiplicity( std::size_t multiplicity=1 ) { m_multiplicity = multiplicity; } // zero means we're dead
+
+	weight_type weight() const { return m_weight; }
+	void set_weight( weight_type weight=1 ) { m_weight = weight; }
 
 	std::size_t bytesize() const { return this->size_impl(); }
 
@@ -115,6 +122,24 @@ public:
 		return boolvec;
 	}
 
+	inline bool is_similar_to( const StateVector<state_t>& rhs, std::size_t hamming_distance_threshold ) const
+	{
+    	std::cout << "StateVector_impl_base::is_similar_to( const StateVector& rhs ) -- FALLBACK" << std::endl;
+   		using boost::get;
+
+   		std::size_t Npos = std::min( this->size(), rhs.size() );
+		std::size_t N(0), n(0);
+
+		for( auto pair: zip_range( static_cast<const_ref_cast_t>(*this), rhs ) )
+		{
+			++n;
+			get<0>(pair) == get<1>(pair) && ++N;
+			if( N+(Npos-n) < hamming_distance_threshold ) { return false; }
+		}
+
+		return N > hamming_distance_threshold ? true: false;
+	}
+
 private:
 	using derived_type = StateVectorT;
 	using cast_t = derived_type* const;
@@ -122,6 +147,7 @@ private:
 	using const_ref_cast_t = const derived_type&;
 
 	std::size_t m_multiplicity; // the number of virtual sequences (identical, or near identical) that this sequence represents
+	weight_type m_weight;
 	std::string m_id_string;
 
 	//StateVector_ptr clone_impl() const override { return static_cast<const_cast_t>(this)->clone(); }
@@ -149,7 +175,9 @@ private:
     }
 
     block_type get_block_impl( std::size_t index ) const override { return static_cast<const_cast_t>(this)->get_block(index); }
-	const frequencies_type& frequencies_impl() const override { return static_cast<const_cast_t>(this)->frequencies(); }
+    const block_index_container_t& get_block_indices_impl() const { return static_cast<const_cast_t>(this)->get_block_indices(); }
+
+    //const frequencies_type& frequencies_impl() const override { return static_cast<const_cast_t>(this)->frequencies(); }
 
     std::size_t size_impl() const override { return static_cast<const_cast_t>(this)->size(); }
     const std::string& id_string_impl() const override { return static_cast<const_cast_t>(this)->id_string(); }
@@ -158,6 +186,9 @@ private:
 
     std::size_t multiplicity_impl() const override { return static_cast<const_cast_t>(this)->multiplicity(); }
 	void set_multiplicity_impl( std::size_t multiplicity ) override { static_cast<cast_t>(this)->set_multiplicity(multiplicity); }
+
+    weight_type weight_impl() const override { return static_cast<const_cast_t>(this)->weight(); }
+	void set_weight_impl( weight_type weight ) override { static_cast<cast_t>(this)->set_weight(weight); }
 
 	std::size_t logical_AND_operator( const StateVector<state_t>& rhs ) const override
 	{
@@ -187,7 +218,21 @@ private:
     	}
 	}
 
-    const std::type_info& type_impl() const override { return static_cast<const_cast_t>(this)->type(); }
+	bool is_similar_to_impl( const StateVector<state_t>& rhs, std::size_t hamming_distance_threshold ) const override
+	{
+    	if( static_cast<const_ref_cast_t>(*this).type() == rhs.type() )
+    	{
+    		return static_cast<const_ref_cast_t>(*this).is_similar_to( static_cast<const_ref_cast_t>(rhs), hamming_distance_threshold );
+    	}
+    	else
+    	{
+    		// redirect to default implementation in StateVector_impl_base, unless derived_type implements operator&&( const StateVector& rhs )
+    		//return static_cast<const_ref_cast_t>(*this) && rhs;
+    		return this->is_similar_to( rhs, hamming_distance_threshold );
+    	}
+	}
+
+	const std::type_info& type_impl() const override { return static_cast<const_cast_t>(this)->type(); }
 
     //StateVector_subscript_proxy<value_type> subscript_proxy_impl() const override { return static_cast<const_ref_cast_t>(*this).subscript_proxy(); }
 

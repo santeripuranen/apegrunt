@@ -43,10 +43,10 @@ template< typename IteratorT, typename AlignmentT > struct Alignment_parser_FAST
 
 #ifdef USE_BOOST_SPIRIT_X3
 #define ALIGNMENT_PARSER_GRAMMAR_FRIENDS(Alignment_type) \
-	template< statevector_t > friend class apegrunt::parsers::Alignment_parser_grammar::parse;
+	template< typename Alignment_type > friend class apegrunt::parsers::Alignment_parser_grammar::parse;
 #else
 #define ALIGNMENT_PARSER_GRAMMAR_FRIENDS(Alignment_type) \
-	template< typename IteratorT, Alignment_type& > friend class apegrunt::parsers::Alignment_parser_FASTA_grammar;
+	template< typename IteratorT, typename Alignment_type > friend class apegrunt::parsers::Alignment_parser_FASTA_grammar;
 #endif // #ifdef USE_BOOST_SPIRIT_X3
 
 } // namespace apegrunt

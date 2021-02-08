@@ -22,10 +22,17 @@
 #ifndef APEGRUNT_ALIGNMENT_INTERFACE_FORWARD_H
 #define APEGRUNT_ALIGNMENT_INTERFACE_FORWARD_H
 
+#include <memory> // for std::shared_ptr
+
 namespace apegrunt {
 
 enum { StateBlock_size = 16 };
-enum { SequenceGroup_blocksize = 512 };
+
+static constexpr std::size_t get_last_block_size( std::size_t n_columns ) { return n_columns == 0 ? 0 : ((n_columns-1) % StateBlock_size )+1; }
+static constexpr std::size_t get_last_block_index( std::size_t n_columns ) { return n_columns == 0 ? 0 : (n_columns / StateBlock_size) - ( n_columns % StateBlock_size == 0 ? 1 : 0 ); }
+static constexpr std::size_t get_number_of_blocks( std::size_t n_columns ) { return n_columns == 0 ? 0 : get_last_block_index(n_columns) + 1; }
+static constexpr std::size_t get_block_index( std::size_t pos ) { return pos == 0 ? 0 : pos/StateBlock_size; }
+static constexpr std::size_t get_pos_in_block( std::size_t pos ) { return pos%StateBlock_size; }
 
 } // namespace apegrunt
 
@@ -42,8 +49,7 @@ using Alignment_ptr = std::shared_ptr< Alignment<StateT> >;
 template< typename AlignmentT, typename... Args >
 Alignment_ptr< typename AlignmentT::state_t > make_Alignment_ptr( Args&&... args )
 {
-	return std::make_shared< AlignmentT >( std::move(args...) );
-	//return Alignment_ptr( new AlignmentT( std::move(args...) ) );
+	return std::make_shared< AlignmentT >( std::forward<Args>(args)... );
 }
 
 template< typename AlignmentT >

@@ -24,6 +24,7 @@
 
 #include <iosfwd> // for passing std::istream*
 #include <string>
+#include <random> // C++11
 
 #include <boost/spirit/include/qi.hpp>
 #include <boost/spirit/include/support_istream_iterator.hpp>
@@ -77,6 +78,7 @@ Loci_ptr parse_Loci_list( const std::string& infilename, std::size_t base_index=
 		{
 			loci->set_id_string( filepath.stem().c_str() );
 		}
+		mmap.close();
 	}
 	return loci;
 }
@@ -102,9 +104,33 @@ Loci_ptr make_Loci_list( std::ostringstream& loci_stream, std::size_t base_index
 }
 
 template< typename LociT=Loci_impl_default_storage<std::size_t> >
-Loci_ptr make_Loci_list( std::vector<std::size_t> loci_list, std::size_t base_index=0 )
+Loci_ptr make_Loci_list( std::vector<std::size_t>&& loci_list, std::size_t base_index=0 )
 {
-	return make_Loci_ptr<LociT>(loci_list);
+	return make_Loci_ptr<LociT>(std::move(loci_list));
+}
+
+Loci_ptr create_random_Loci_list(
+		std::size_t n_loci,
+		std::size_t sample_count, // number of samples
+		std::size_t random_seed=0 // if random_seed==0, then generate a new random random seed )
+	)
+{
+	// initialize random number generator
+	if( 0 == random_seed )
+	{
+		std::random_device rd; // used only once -- generates random seed for mt generator below
+		random_seed = rd();
+	}
+	std::mt19937_64 generator(random_seed);
+	std::uniform_int_distribution<std::size_t> distribution( 0, n_loci-1 );
+	auto grand = std::bind( distribution, generator );
+
+	auto accept_list = std::vector<std::size_t>();
+	accept_list.reserve( sample_count );
+
+	for( auto i=0; i < sample_count; ++i ) { accept_list.push_back( grand() ); }
+
+	return make_Loci_list( std::move(accept_list), 0 );
 }
 
 } // namespace apegrunt

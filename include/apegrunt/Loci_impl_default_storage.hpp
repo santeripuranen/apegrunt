@@ -169,7 +169,7 @@ private:
 #ifdef USE_BOOST_SPIRIT_X3
 	template< my_type > friend class apegrunt::parsers::Loci_parser_grammar::parse;
 #else
-	template< typename IteratorT, my_type& > friend class apegrunt::parsers::Loci_parser_grammar;
+	template< typename IteratorT, typename my_type > friend class apegrunt::parsers::Loci_parser_grammar;
 #endif
 	friend class Loci_mutator<my_type>;
 

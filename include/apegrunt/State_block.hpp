@@ -25,6 +25,9 @@
 #include <cctype>
 #include <functional> // for std::hash
 
+#include <bitset>
+#include <limits>
+
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/nvp.hpp>
 
@@ -32,21 +35,28 @@
 
 namespace apegrunt {
 
-template< typename MaskT, uint N, typename StencilT >
+template< typename MaskT, std::size_t N, typename StencilT >
 constexpr MaskT create_clear( StencilT stencil ) { MaskT mask=0; uint n=0; while( n < N ) { mask = mask | ( MaskT(stencil) << n*8*sizeof(StencilT) ); ++n; } return mask; }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 //struct alignas(sizeof(void*)) State_block
 struct alignas(Size) State_block
 {
 	using state_t = StateT;
 	enum { N=Size };
-	enum { CLEAR=uint8_t(state_t::state_t::GAP) };
+	enum { N16=N/sizeof(uint16_t) };
+	enum { N32=N/sizeof(uint32_t) };
+	enum { N64=N/sizeof(uint64_t) };
+	enum { CLEAR=uint8_t(gap_state<state_t>::value) };
 
-	using row_t = std::array<state_t,N>;
 	using my_type = State_block< StateT, N >;
+	using block16_t = uint16_t;
+	using block32_t = uint32_t;
+	using block64_t = uint64_t;
 
-	row_t m_states;
+	union {
+		state_t m_states[N];
+	};
 
 	State_block() { this->clear(); }
 	~State_block() { } // "= default;" won't work here, since the union type makes it non-trivial
@@ -87,6 +97,7 @@ struct alignas(Size) State_block
 		return true;
 	}
 
+	// this is rather arbitrary since state_t are categorical variables, but we define it nonetheless in order to support sorting.
 	inline bool operator<( const my_type& rhs ) const
 	{
 		for( std::size_t i=0; i < N; ++i )
@@ -96,6 +107,9 @@ struct alignas(Size) State_block
 		return false;
 	}
 };
+
+template< typename StateT, std::size_t Size >
+constexpr std::size_t size( const State_block< StateT, Size >& block ) { return Size; }
 /*
 template< typename StateT, uint Size >
 struct hash< State_block< StateT, Size > >
@@ -118,12 +132,22 @@ struct State_block<StateT,8>
 {
 	using state_t = StateT;
 	enum { N=8 };
-	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
+	enum { N16=N/sizeof(uint16_t) };
+	enum { N32=N/sizeof(uint32_t) };
+	enum { N64=N/sizeof(uint64_t) };
+	//enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
+	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(gap_state<state_t>::value)) };
 
 	using my_type = State_block< StateT, N >;
+	using block16_t = uint16_t;
+	using block32_t = uint32_t;
+	using block64_t = uint64_t;
 
 	union {
 		state_t m_states[N];
+		block16_t m_block16[N16];
+		block32_t m_block32[N32];
+		block64_t m_block64[N64];
 		uint64_t m_block;
 	};
 
@@ -135,6 +159,11 @@ struct State_block<StateT,8>
 
 	inline state_t& operator[]( std::size_t pos ) { return m_states[pos]; }
 	inline const state_t& operator[]( std::size_t pos ) const { return m_states[pos]; }
+
+	inline uint16_t block16( std::size_t pos ) const { return m_block16[pos]; }
+	inline uint32_t block32( std::size_t pos ) const { return m_block32[pos]; }
+	inline uint64_t block64( std::size_t pos ) const { return m_block64[pos]; }
+
 	State_block() : m_block{CLEAR} { }
 	~State_block() { } // "= default" won't work here, since the union type apparently makes it non-trivial
 
@@ -152,19 +181,19 @@ struct State_block<StateT,8>
 };
 // /*
 // */
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator!=( const State_block<StateT,Size>& lhs, const State_block<StateT,Size>& rhs ) { return !(lhs == rhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator> ( const State_block<StateT,Size>& lhs, const State_block<StateT,Size>& rhs ) { return (rhs < lhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator<=( const State_block<StateT,Size>& lhs, const State_block<StateT,Size>& rhs ) { return !(lhs > rhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator>=( const State_block<StateT,Size>& lhs, const State_block<StateT,Size>& rhs ) { return !(lhs < rhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 std::ostream& operator<< ( std::ostream& os, const State_block<StateT,Size>& block )
 {
 	for( std::size_t i=0; i < Size; ++i )
@@ -174,12 +203,17 @@ std::ostream& operator<< ( std::ostream& os, const State_block<StateT,Size>& blo
 	return os;
 }
 
-template< typename StateT, uint Size >
-std::size_t count_identical( State_block<StateT,Size> lhs, State_block<StateT,Size> rhs ) { std::size_t n=0; for( std::size_t i=0; i<Size; ++i ) { lhs[i] == rhs[i] && ++n; } return n; }
+template< typename StateT, std::size_t Size >
+std::size_t count_identical( State_block<StateT,Size> lhs, State_block<StateT,Size> rhs )
+{
+	std::size_t n=0;
+	for( std::size_t i=0; i<Size; ++i ) { lhs[i] == rhs[i] && ++n; }
+	return n;
+}
 
 } // namespace apegrunt
 
-#include "SIMD_intrinsics.h"
+#include "misc/SIMD_intrinsics.h"
 
 namespace apegrunt {
 
@@ -192,18 +226,28 @@ struct alignas(16) State_block<StateT,16>
 	using state_t = StateT;
 	using simd_t = __m128i;
 	enum { N=16 };
-	enum { Nblock=N/sizeof(uint64_t) };
-	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
+	enum { N16=N/sizeof(uint16_t) };
+	enum { N32=N/sizeof(uint32_t) };
+	enum { N64=N/sizeof(uint64_t) };
+	//enum { Nblock=N/sizeof(uint64_t) };
+	//enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
+	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(gap_state<state_t>::value)) };
+	enum { TRUE=0xFFFF };
 
 	using my_type = State_block< state_t, N >;
+	using block16_t = uint16_t;
+	using block32_t = uint32_t;
+	using block64_t = uint64_t;
 
 	union {
 		state_t m_states[N];
-		uint64_t m_block[Nblock];
+		block16_t m_block16[N16];
+		block32_t m_block32[N32];
+		block64_t m_block64[N64];
 	};
 
 	State_block() { this->clear(); }
-	~State_block() { } // "= default;" won't work here, since the union type makes it non-trivial
+	~State_block() { } // "= default;" won't work here, since the union type makes the constructor non-trivial
 
 	State_block( my_type&& other ) noexcept { this->store( other() ); }
 	State_block( const my_type& other ) { this->store( other() ); }
@@ -221,23 +265,50 @@ struct alignas(16) State_block<StateT,16>
 	inline state_t& operator[]( std::size_t pos ) { return m_states[pos]; }
 	inline const state_t& operator[]( std::size_t pos ) const { return m_states[pos]; }
 
-	inline void clear() { this->store( _mm_set1_epi8( char(state_t::state_t::GAP) ) ); }
+	inline uint16_t block16( std::size_t pos ) const { return m_block16[pos]; }
+	inline uint32_t block32( std::size_t pos ) const { return m_block32[pos]; }
+	inline uint64_t block64( std::size_t pos ) const { return m_block64[pos]; }
+
+	inline void clear() { this->store( _mm_set1_epi8( char(gap_state<state_t>::value) ) ); }
 
 	inline bool operator==( const my_type& rhs ) const
 	{
-		return m_block[0] == rhs.m_block[0] && m_block[1] == rhs.m_block[1];
+		return TRUE == _mm_movemask_epi8( _mm_cmpeq_epi8( this->load(), rhs() ) );
+		//return m_block[0] == rhs.m_block[0] && m_block[1] == rhs.m_block[1];
 	}
 
 	inline bool operator<( const my_type& rhs ) const
 	{
-		//return m_block[0] < rhs.m_block[0] && m_block[1] < rhs.m_block[1];
+		return TRUE == _mm_movemask_epi8( _mm_cmplt_epi8( this->load(), rhs() ) );
+/*
 		for( std::size_t i=0; i < N; ++i )
 		{
 			if( m_states[i] < rhs.m_states[i] ) { return true; }
 		}
 		return false;
+*/
 	}
 };
+
+#ifdef __POPCNT__
+template< typename StateT >
+inline std::size_t count_identical( State_block<StateT,16> lhs, State_block<StateT,16> rhs )
+{
+	// Intel's had popcnt since Nehalem, so should be fairly safe to use nowadays
+	return _mm_popcnt_u32( _mm_movemask_epi8( _mm_cmpeq_epi8( lhs(), rhs() ) ) );
+}
+/*
+#else // for our purposes (comparing 1B pieces for equality) this bit-manipulation implementation is actually slower than the reference implementation
+template< typename StateT >
+inline std::size_t count_identical( State_block<StateT,16> lhs, State_block<StateT,16> rhs )
+{
+	uint32_t i = _mm_movemask_epi8( _mm_cmpeq_epi8( lhs(), rhs() ) );
+	i = i - ( (i >> 1) & 0x55555555 );
+	i = (i & 0x33333333) + ((i >> 2) & 0x33333333);
+	return (((i + (i >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+}*/
+#endif // __POPCNT__
+
 #endif // __SSE2__
 
 #ifdef __AVX__
@@ -248,18 +319,25 @@ struct alignas(32) State_block<StateT,32>
 	using state_t = StateT;
 	using simd_t = __m256i;
 	enum { N=32 };
-	enum { Nblock=N/sizeof(uint64_t) };
-	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
+	enum { N16=N/sizeof(uint16_t) };
+	enum { N32=N/sizeof(uint32_t) };
+	enum { N64=N/sizeof(uint64_t) };
+	//enum { Nblock=N/sizeof(uint64_t) };
+	//enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
+	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(gap_state<state_t>::value)) };
+	enum { TRUE=0xFFFFFFFF };
 
 	using my_type = State_block< state_t, N >;
 
 	//union alignas(32) {
 	union {
 		state_t m_states[N];
-		uint64_t m_block[Nblock];
+		uint16_t m_block16[N16];
+		uint32_t m_block32[N32];
+		uint64_t m_block64[N64];
 	};
 
-	State_block() { this->store( _mm256_set1_epi8( char(state_t::state_t::GAP) ) ); } // std::cout << this << " 32B-aligned: " << ( std::size_t(&m_vec) % 32 == 0 ? "true" : "FALSE") << std::endl;  }
+	State_block() { this->store( _mm256_set1_epi8( char(gap_state<state_t>::value) ) ); } // std::cout << this << " 32B-aligned: " << ( std::size_t(&m_vec) % 32 == 0 ? "true" : "FALSE") << std::endl;  }
 	~State_block() { } // "= default;" won't work here, since the union type makes it non-trivial
 
 	State_block( my_type&& other ) noexcept { this->store( other() ); }
@@ -284,23 +362,48 @@ struct alignas(32) State_block<StateT,32>
 	inline state_t& operator[]( std::size_t pos ) { return m_states[pos]; }
 	inline const state_t& operator[]( std::size_t pos ) const { return m_states[pos]; }
 
-	inline void clear() { this->store( _mm256_set1_epi8( char(state_t::state_t::GAP) ) ); }
+	inline uint16_t block16( std::size_t pos ) const { return m_block16[pos]; }
+	inline uint32_t block32( std::size_t pos ) const { return m_block32[pos]; }
+	inline uint64_t block64( std::size_t pos ) const { return m_block64[pos]; }
 
+	inline void clear() { this->store( _mm256_set1_epi8( char(gap_state<state_t>::value) ) ); }
 	inline bool operator==( const my_type& rhs ) const
 	{
-		return	m_block[0] == rhs.m_block[0] && m_block[1] == rhs.m_block[1] && m_block[2] == rhs.m_block[2] && m_block[3] == rhs.m_block[3];
+#ifdef __AVX2__
+		return TRUE == _mm256_movemask_epi8( _mm256_cmpeq_epi8( this->load(), rhs() ) ); // both ops are AVX2
+#else
+		return m_block64[0] == rhs.m_block64[0] && m_block64[1] == rhs.m_block64[1] && m_block64[2] == rhs.m_block64[2] && m_block64[3] == rhs.m_block64[3];
+#endif // __AVX2__
 	}
 
 	inline bool operator<( const my_type& rhs ) const
 	{
-		//return m_block[0] < rhs.m_block[0] && m_block[1] < rhs.m_block[1] && m_block[2] < rhs.m_block[2] && m_block[3] < rhs.m_block[3];
+#ifdef __AVX2__
+		return TRUE == _mm256_movemask_epi8( _mm256_cmplt_epi8( this->load(), rhs() ) ); // both ops are AVX2
+#else
 		for( std::size_t i=0; i < N; ++i )
 		{
-			if( m_states[i] < rhs.m_states[i] ) { return true; }
+			if( !(m_states[i] < rhs.m_states[i]) ) { return false; }
 		}
-		return false;
+		return true;
+#endif // __AVX2__
 	}
 };
+
+#endif // __AVX__
+
+#ifdef __AVX2__
+
+#ifdef __POPCNT__
+template< typename StateT >
+inline std::size_t count_identical( State_block<StateT,32> lhs, State_block<StateT,32> rhs )
+{
+	// Intel's had popcnt since Nehalem, so should be fairly safe to use nowadays
+	return _mm_popcnt_u32( _mm256_movemask_epi8( _mm256_cmpeq_epi8( lhs(), rhs() ) ) );
+}
+#endif // __POPCNT__
+
+#endif // __AVX2__
 
 /*
 template< typename StateT >
@@ -310,7 +413,8 @@ struct alignas(32) State_block<StateT,64>
 	using simd_t = __m256i;
 	enum { N=64 };
 	enum { Nblock=N/sizeof(uint64_t) };
-	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
+	//enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
+	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(gap_state<state_t>::value)) };
 
 	using my_type = State_block< state_t, N >;
 
@@ -319,7 +423,7 @@ struct alignas(32) State_block<StateT,64>
 		uint64_t m_block[Nblock];
 	};
 
-	State_block() { this->store( _mm256_set1_epi8( char(state_t::state_t::GAP) ) ); } // std::cout << this << " 32B-aligned: " << ( std::size_t(&m_vec) % 32 == 0 ? "true" : "FALSE") << std::endl;  }
+	State_block() { this->store( _mm256_set1_epi8( char(gap_state<state_t>::value) ) ); } // std::cout << this << " 32B-aligned: " << ( std::size_t(&m_vec) % 32 == 0 ? "true" : "FALSE") << std::endl;  }
 	~State_block() { } // "= default;" won't work here, since the union type makes it non-trivial
 
 	State_block( my_type&& other ) noexcept { this->store( other() ); }
@@ -344,7 +448,7 @@ struct alignas(32) State_block<StateT,64>
 	inline state_t& operator[]( std::size_t pos ) { return m_states[pos]; }
 	inline const state_t& operator[]( std::size_t pos ) const { return m_states[pos]; }
 
-	inline void clear() { this->store( _mm256_set1_epi8( char(state_t::state_t::GAP) ) ); }
+	inline void clear() { this->store( _mm256_set1_epi8( char(gap_state<state_t>::value) ) ); }
 
 	inline bool operator==( const my_type& rhs ) const
 	{
@@ -364,8 +468,6 @@ struct alignas(32) State_block<StateT,64>
 };
 */
 
-#endif // __AVX__
-
 #else // #ifndef NO_INTRINSICS
 
 template< typename StateT >
@@ -373,8 +475,12 @@ struct State_block<StateT,16>
 {
 	using state_t = StateT;
 	enum { N=16 };
+	enum { N16=N/sizeof(uint16_t) };
+	enum { N32=N/sizeof(uint32_t) };
+	enum { N64=N/sizeof(uint64_t) };
 	enum { Nblock=N/sizeof(uint64_t) };
-	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
+	//enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
+	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(gap_state<state_t>::value)) };
 
 	using my_type = State_block< StateT, N >;
 
@@ -436,7 +542,8 @@ struct State_block<StateT,32>
 	using state_t = StateT;
 	enum { N=32 };
 	enum { Nblock=N/sizeof(uint64_t) };
-	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
+	//enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
+	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(gap_state<state_t>::value)) };
 	using my_type = State_block< state_t, N >;
 	using row_t = std::array< state_t, N >;
 
@@ -601,16 +708,16 @@ struct alignas(Size*2) Compressed_state_block
 	}
 };
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator!=( const Compressed_state_block<StateT,Size>& lhs, const Compressed_state_block<StateT,Size>& rhs ) { return !(lhs == rhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator> ( const Compressed_state_block<StateT,Size>& lhs, const Compressed_state_block<StateT,Size>& rhs ) { return (rhs < lhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator<=( const Compressed_state_block<StateT,Size>& lhs, const Compressed_state_block<StateT,Size>& rhs ) { return !(lhs > rhs); }
 
-template< typename StateT, uint Size >
+template< typename StateT, std::size_t Size >
 inline bool operator>=( const Compressed_state_block<StateT,Size>& lhs, const Compressed_state_block<StateT,Size>& rhs ) { return !(lhs < rhs); }
 
 template< typename StateT, std::size_t Size >

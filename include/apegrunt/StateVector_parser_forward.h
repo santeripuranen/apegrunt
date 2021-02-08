@@ -44,11 +44,11 @@ struct StateVector_parser_FASTA_grammar;
 
 #ifdef USE_BOOST_SPIRIT_X3
 #define STATEVECTOR_PARSER_GRAMMAR_FRIENDS(StateVector_type) \
-	template< StateVector_type > friend class apegrunt::parsers::StateVector_parser_grammar::parse; \
+	template< typename StateVector_type > friend class apegrunt::parsers::StateVector_parser_grammar::parse; \
 
 #else
 #define STATEVECTOR_PARSER_GRAMMAR_FRIENDS(StateVector_type) \
-	template< typename IteratorT, StateVector_type& > friend class apegrunt::parsers::StateVector_parser_FASTA_grammar; \
+	template< typename IteratorT, typename StateVector_type > friend class apegrunt::parsers::StateVector_parser_FASTA_grammar; \
 
 #endif // #ifdef USE_BOOST_SPIRIT_X3
 
