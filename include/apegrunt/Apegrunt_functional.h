@@ -1,6 +1,6 @@
-/** @file IntegerSequence_Hybrid_bitset_range.h
+/** @file Apegrunt_functional.h
 
-	Copyright (c) 2018-2021 Santeri Puranen. All rights reserved.
+	Copyright (c) 2016-2020 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -19,14 +19,15 @@
 	$Id: $
 */
 
-#ifndef APEGRUNT_INTEGERSEQUENCE_HYBRID_BITSET_RANGE_H
-#define APEGRUNT_INTEGERSEQUENCE_HYBRID_BITSET_RANGE_H
+#ifndef APEGRUNT_FUNCTIONAL_H
+#define APEGRUNT_FUNCTIONAL_H
 
-#include "IntegerSequence_Hybrid_bitset_range_forward.h"
-#include "IntegerSequence_Hybrid_bitset_range.hpp"
-#include "IntegerSequence_Hybrid_bitset_range_operations_forward.h"
-#include "IntegerSequence_Hybrid_bitset_range_iterator.hpp"
-#include "IntegerSequence.h"
-#include "IntegerSequence_Hybrid_bitset_range_operations.hpp"
+namespace apegrunt {
 
-#endif // APEGRUNT_INTEGERSEQUENCE_HYBRID_BITSET_RANGE_H
+template< typename T > struct hash;
+
+template< typename T > struct equal_to;
+
+} // namespace apegrunt
+
+#endif // APEGRUNT_FUNCTIONAL_H

@@ -1,6 +1,6 @@
 /** @file IntegerSequence_Hybrid_bitset_range_operations_forward.h
 
-	Copyright (c) 2018-2020 Santeri Puranen.
+	Copyright (c) 2018-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -24,7 +24,6 @@
 
 #include <ostream>
 #include <vector>
-#include <functional> // for std::reference_wrapper
 
 #include "IntegerSequence_forward.h"
 #include "IntegerSequence_operations_forward.h"
@@ -32,41 +31,29 @@
 
 namespace apegrunt {
 
-template< typename IndexT, bool Aligned >
-std::ostream& operator<< ( std::ostream& os, const IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> >& container );
+template< typename IndexT, bool Aligned=true >
+IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> > set_union( const IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> >& a, const IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> >& b );
 
 template< typename IndexT >
-std::ostream& operator<< ( std::ostream& os, const IntegerSequence< Hybrid_bitset_range_element<IndexT,true> >& container );
+IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union( const IntegerSequence< Hybrid_bitset_range_element<IndexT,true> >& a, const IntegerSequence< Hybrid_bitset_range_element<IndexT,true> >& b );
 
 template< typename IndexT, bool Aligned=true >
-Hybrid_bitset_sequence<IndexT,Aligned> set_intersection( const Hybrid_bitset_sequence<IndexT,Aligned>& a, const Hybrid_bitset_sequence<IndexT,Aligned>& b );
+IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> > set_union( const std::vector< std::reference_wrapper< const IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> > > >& sets );
 
 template< typename IndexT >
-Hybrid_bitset_sequence<IndexT,true> set_intersection( const Hybrid_bitset_sequence<IndexT,true>& a, const Hybrid_bitset_sequence<IndexT,true>& b );
+IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union( const std::vector< std::reference_wrapper< const IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > > >& sets );
 
-template< typename IndexT, typename RealT, bool Aligned=true >
-RealT intersect_and_gather( const Hybrid_bitset_sequence<IndexT,Aligned>& a, const Hybrid_bitset_sequence<IndexT,Aligned>& b, const std::vector<RealT>& weights );
+template< typename IndexT, typename UnaryFunction, bool Aligned=true >
+UnaryFunction inplace_set_differences_and_for_each_in_intersection( IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> >& a, IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> >& b, UnaryFunction f );
 
-template< typename IndexT, typename RealT >
-RealT intersect_and_gather( const Hybrid_bitset_sequence<IndexT,true>& a, const Hybrid_bitset_sequence<IndexT,true>& b, const std::vector<RealT>& weights );
+template< typename IndexT, typename UnaryFunction >
+UnaryFunction inplace_set_differences_and_for_each_in_intersection( IntegerSequence< Hybrid_bitset_range_element<IndexT,true> >& a, IntegerSequence< Hybrid_bitset_range_element<IndexT,true> >& b, UnaryFunction f );
 
 template< typename IndexT, bool Aligned=true >
-Hybrid_bitset_sequence<IndexT,Aligned> set_union( const Hybrid_bitset_sequence<IndexT,Aligned>& a, const Hybrid_bitset_sequence<IndexT,Aligned>& b );
-
-template< typename IndexT >
-Hybrid_bitset_sequence<IndexT,true> set_union( const Hybrid_bitset_sequence<IndexT,true>& a, const Hybrid_bitset_sequence<IndexT,true>& b );
+struct hash< IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> > >;
 
 template< typename IndexT, bool Aligned=true >
-Hybrid_bitset_sequence<IndexT,Aligned> set_union( const std::vector< std::reference_wrapper< const Hybrid_bitset_sequence<IndexT,Aligned> > >& sets );
-
-template< typename IndexT >
-Hybrid_bitset_sequence<IndexT,true> set_union( const std::vector< std::reference_wrapper< const Hybrid_bitset_sequence<IndexT,true> > >& sets );
-
-template< typename IndexT, bool Aligned >
-struct hash< Hybrid_bitset_sequence<IndexT,Aligned> >;
-
-template< typename IndexT, bool Aligned >
-struct equal_to< Hybrid_bitset_sequence<IndexT,Aligned> >;
+struct equal_to< IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> > >;
 
 } // namespace apegrunt
 

@@ -1,6 +1,6 @@
 /** @file Alignment_interface.hpp
  
-	Copyright (c) 2016-2017 Santeri Puranen.
+	Copyright (c) 2016-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -87,7 +87,7 @@ public:
 
 	using block_index_t = uint32_t; // uint16_t is only good for alignments up to 2^16 (=65536) samples
 	//using block_accounting_container_t = std::vector<block_index_t>;
-	using block_accounting_container_t = apegrunt::Hybrid_bitset_sequence<block_index_t>; // effective range is one bit less than block_index_t type
+	using block_accounting_container_t = apegrunt::Apegrunt_bitset<block_index_t>;
 	using block_accounting_t = std::vector< std::vector< block_accounting_container_t > >;
 	using block_accounting_ptr = std::shared_ptr< block_accounting_t >;
 

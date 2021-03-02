@@ -1,6 +1,6 @@
 /** @file Alignment_utility.hpp
 
-	Copyright (c) 2016-2017 Santeri Puranen.
+	Copyright (c) 2016-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -468,17 +468,22 @@ std::vector<RealT> block_list_intersection_weights( const block_list_intersectio
 
 
 template< typename RealT >
-struct block_list_intersected_weights_container
+struct block_list_intersection_weights_container
 {
+	block_list_intersection_weights_container( std::size_t reserve )
+	{
+		block_pairs.reserve(reserve);
+		block_pair_weights.reserve(reserve);
+	}
+
 	std::vector< std::pair<std::size_t, std::size_t> > block_pairs;
 	std::vector< RealT > block_pair_weights;
 
 	std::size_t size() const { return block_pairs.size(); }
 };
 
-
 template< typename ContainerT, typename RealT >
-block_list_intersected_weights_container<RealT> block_list_intersection_weights( const std::vector< ContainerT >& a, const std::vector< ContainerT >& b, const std::vector<RealT>& sample_weights )
+block_list_intersection_weights_container<RealT> inplace_block_list_intersection_weights( const std::vector< ContainerT >& a, std::vector< ContainerT >& b, const std::vector<RealT>& sample_weights )
 {
 	using std::cbegin; using std::cend; using std::begin;
 
@@ -486,28 +491,38 @@ block_list_intersected_weights_container<RealT> block_list_intersection_weights(
 	using real_t = RealT;
 	using index_t = typename container_t::value_type;
 
-	block_list_intersected_weights_container<real_t> intersections;
-	intersections.block_pairs.reserve( a.size()*b.size() ); // this is the upper limit; actual use could be less
-	intersections.block_pair_weights.reserve( a.size()*b.size() ); // this is the upper limit; actual use could be less
+	block_list_intersection_weights_container<real_t> intersections( a.size()*b.size() );
 
-	// going with indexing here instead of iterators, for simpler block pair tracking below
 	for( std::size_t i=0; i < a.size(); ++i )
-	//for( auto aitr=cbegin(a); aitr != cend(a); ++aitr )
 	{
-		for( std::size_t j=0; j < b.size(); ++j )
-		//for( auto bitr=cbegin(b); bitr != cend(b); ++bitr )
+		auto ai( a[i] );
+		for( std::size_t j=0; j < b.size() && !ai.is_empty(); ++j )
 		{
-			//auto isect = apegrunt::set_intersection( a[i], b[j] );
-			auto intersection_weight = apegrunt::intersect_and_gather( a[i], b[j], sample_weights );
-
-			if( intersection_weight != 0 )
+			if( b[j].is_empty() ) { continue; }
+			else
 			{
-				intersections.block_pairs.emplace_back( i, j );
-				intersections.block_pair_weights.emplace_back( intersection_weight );
+				if( ai.has_overlap(b[j]) )
+				{
+					const auto result = apegrunt::inplace_set_differences_and_for_each_in_intersection( ai, b[j], apegrunt::gatherer<real_t>(sample_weights.data()) );
+					if( result.sum != 0 )
+					{
+						intersections.block_pairs.emplace_back( i, j );
+						intersections.block_pair_weights.emplace_back( result.sum );
+					}
+				}
 			}
 		}
 	}
+
 	return intersections;
+}
+
+template< typename ContainerT, typename RealT >
+block_list_intersection_weights_container<RealT> block_list_intersection_weights( const std::vector< ContainerT >& a, const std::vector< ContainerT >& b, const std::vector<RealT>& sample_weights )
+{
+	auto _b(b);
+
+	return inplace_block_list_intersection_weights(a,_b,sample_weights);
 }
 
 template< typename StateT >
