@@ -1,6 +1,6 @@
 # Version $Id: $
 
-# Aoegrunt src
+# Apegrunt src
 
 ############################
 ## Add sources and includes
@@ -9,7 +9,7 @@
 include_directories(
 	${CMAKE_CURRENT_BINARY_DIR}
 	${APEGRUNT_INCLUDE_DIR}
-	${Boost_INCLUDE_DIR}
+	${Boost_INCLUDE_DIRS}
 	${TBB_INCLUDE_DIRS}
 )
 
@@ -29,8 +29,8 @@ set( APEGRUNT_BINARY_SOURCES
 ## Define compiler and linker options
 ###
 
-### General optimization flags	
-set( APEGRUNT_OPTIMIZATION_FLAGS "${APEGRUNT_OPTIMIZATION_FLAGS} -O3 -static-libstdc++" )
+### General optimization flags
+set( APEGRUNT_OPTIMIZATION_FLAGS "${APEGRUNT_OPTIMIZATION_FLAGS} -O3 -msse3 -mpopcnt -static-libstdc++" )
 set( APEGRUNT_OPTIMIZATION_FLAGS "${APEGRUNT_OPTIMIZATION_FLAGS} -ftree-vectorize -fwhole-program" )
 set( APEGRUNT_OPTIMIZATION_FLAGS "${APEGRUNT_OPTIMIZATION_FLAGS} -flto -ffat-lto-objects" ) # -flto-report" )
 
