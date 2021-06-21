@@ -56,6 +56,8 @@
 #include "accumulators/distribution_generator_csv.hpp"
 #include "accumulators/accumulators_utility.hpp"
 
+#include "graph/Graph.hpp"
+
 #include "misc/Stopwatch.hpp"
 
 namespace apegrunt {
@@ -109,9 +111,11 @@ std::vector< Alignment_ptr<StateT> > get_alignments( std::size_t max_alignments=
 				*Apegrunt_options::get_out_stream() << "apegrunt: parse alignment from file \"" << filename << "\"\n";
 				Apegrunt_options::get_out_stream()->flush();
 			}
+
 			cputimer.start();
 			auto alignment = apegrunt::parse_Alignment< alignment_default_storage_t >( filename );
 			cputimer.stop();
+
 			if( !alignment )
 			{
 				*Apegrunt_options::get_err_stream() << "apegrunt error: Could not get alignment from input file \"" << filename << "\"\n\n";
@@ -123,8 +127,9 @@ std::vector< Alignment_ptr<StateT> > get_alignments( std::size_t max_alignments=
 				cputimer.start();
 				if( Apegrunt_options::verbose() )
 				{
-					*Apegrunt_options::get_out_stream() << "apegrunt: statistics for alignment \"" << alignment->id_string() << "\":\n";
+					//*Apegrunt_options::get_out_stream() << "apegrunt: statistics for alignment \"" << alignment->id_string() << "\":\n";
 					alignment->statistics( Apegrunt_options::get_out_stream() );
+					//*Apegrunt_options::get_out_stream() << "done\n"; Apegrunt_options::get_out_stream()->flush();
 				}
 				cputimer.stop();
 			}
@@ -169,6 +174,26 @@ std::vector< Alignment_ptr<StateT> > get_alignments( std::size_t max_alignments=
 			}
 		}
 	}
+/*
+	// output alignments? I guess this is mostly useful for testing purposes
+	if( apegrunt::Apegrunt_options::output_alignment() )
+	{
+		for( auto alignment: alignments )
+		{
+			apegrunt::output_alignment( alignment );
+		}
+	}
+
+	// output column-wise frequencies?
+	if( Apegrunt_options::output_state_frequencies() )
+	{
+		for( auto alignment: alignments )
+		{
+			// get state frequency profile and output to file
+			apegrunt::output_state_frequencies( alignment );
+		}
+	}
+*/
 	return alignments;
 }
 
@@ -335,120 +360,31 @@ std::vector< std::array< std::size_t, number_of_states<StateT>::N > > allele_occ
 	return occ_vec;
 }
 
-
-template< typename ContainerT >
-struct block_list_intersection_container
-{
-	std::vector< ContainerT > indices;
-	std::vector< std::pair<std::size_t, std::size_t> > block_pairs;
-
-	std::size_t size() const { return indices.size(); }
-};
-
-template< typename ContainerT >
-block_list_intersection_container<ContainerT> block_list_intersection( const std::vector< ContainerT >& a, const std::vector< ContainerT >& b )
-{
-	using std::cbegin; using std::cend; using std::begin;
-
-	using container_t = ContainerT;
-	using index_t = typename container_t::value_type;
-
-	block_list_intersection_container<container_t> intersections;
-	intersections.indices.reserve( a.size()*b.size() );
-	intersections.block_pairs.reserve( a.size()*b.size() );
-
-	// going with indexing here instead of iterators, for simpler block pair tracking below
-	for( std::size_t i=0; i < a.size(); ++i )
-	//for( auto aitr=cbegin(a); aitr != cend(a); ++aitr )
-	{
-		for( std::size_t j=0; j < b.size(); ++j )
-		//for( auto bitr=cbegin(b); bitr != cend(b); ++bitr )
-		{
-			auto isect = apegrunt::set_intersection( a[i], b[j] );
-/*
-			std::vector<index_t> isect;
-			isect.reserve( std::min(a[i].size(), b[j].size()) ); // can't need more than this, but might be less
-
-			const auto isect_end = std::set_intersection(
-					cbegin(a[i]), cend(a[i]),
-					cbegin(b[j]), cend(b[j]),
-					std::back_inserter(isect)
-			);
-*/
-/*
-			//std::vector<IndexT> isect; isect.reserve( std::min(aitr->size(),bitr->size()) );
-
-			const auto isect_end = std::set_intersection(
-					cbegin(*aitr), cend(*aitr),
-					cbegin(*bitr), cend(*bitr),
-					std::back_inserter(isect)
-			);
-*/
-			if( isect.size() > 0 )
-			{
-				intersections.indices.emplace_back( std::move(isect) );
-				intersections.block_pairs.emplace_back( i, j );
-			}
-		}
-	}
-	return intersections;
-}
-
-template< typename RealT, typename IndexT >
-std::vector<RealT> block_list_intersection_weights( const block_list_intersection_container<IndexT>& container, const std::vector<RealT>& sample_weights )
-{
-	std::vector<RealT> block_weights; block_weights.reserve( container.indices.size() );
-	for( const auto& indices: container.indices )
-	{
-		RealT wsum(0);
-		for( const auto index: indices ) { wsum += sample_weights[index]; }
-		block_weights.push_back( wsum );
-	}
-	return block_weights;
-}
-
-
-template< typename RealT >
-struct block_list_intersection_weights_container
-{
-	block_list_intersection_weights_container( std::size_t reserve )
-	{
-		block_pairs.reserve(reserve);
-		block_pair_weights.reserve(reserve);
-	}
-
-	std::vector< std::pair<std::size_t, std::size_t> > block_pairs;
-	std::vector< RealT > block_pair_weights;
-
-	std::size_t size() const { return block_pairs.size(); }
-};
+using WeightedEdges = std::vector< apegrunt::Edge<true> >;
 
 template< typename ContainerT, typename RealT >
-block_list_intersection_weights_container<RealT> inplace_block_list_intersection_weights( const std::vector< ContainerT >& a, std::vector< ContainerT >& b, const std::vector<RealT>& sample_weights )
+WeightedEdges inplace_block_list_intersection_weights( const std::vector< ContainerT >& a, std::vector< ContainerT >& b, const std::vector<RealT>& sample_weights )
 {
 	using std::cbegin; using std::cend; using std::begin;
 
-	using container_t = ContainerT;
 	using real_t = RealT;
-	using index_t = typename container_t::value_type;
 
-	block_list_intersection_weights_container<real_t> intersections( a.size()*b.size() );
+	WeightedEdges intersections; intersections.reserve(a.size()*b.size());
 
 	for( std::size_t i=0; i < a.size(); ++i )
 	{
 		auto ai( a[i] );
-		for( std::size_t j=0; j < b.size() && !ai.is_empty(); ++j )
+		for( std::size_t j=0; j < b.size() && !ai.empty(); ++j )
 		{
-			if( b[j].is_empty() ) { continue; }
+			if( b[j].empty() ) { continue; }
 			else
 			{
-				if( ai.has_overlap(b[j]) )
+				if( has_overlap(ai,b[j]) )
 				{
 					const auto result = apegrunt::inplace_set_differences_and_for_each_in_intersection( ai, b[j], apegrunt::gatherer<real_t>(sample_weights.data()) );
 					if( result.sum != 0 )
 					{
-						intersections.block_pairs.emplace_back( i, j );
-						intersections.block_pair_weights.emplace_back( result.sum );
+						intersections.emplace_back(i,j,result.sum);
 					}
 				}
 			}
@@ -459,11 +395,53 @@ block_list_intersection_weights_container<RealT> inplace_block_list_intersection
 }
 
 template< typename ContainerT, typename RealT >
-block_list_intersection_weights_container<RealT> block_list_intersection_weights( const std::vector< ContainerT >& a, const std::vector< ContainerT >& b, const std::vector<RealT>& sample_weights )
+WeightedEdges block_list_intersection_weights( const std::vector< ContainerT >& a, const std::vector< ContainerT >& b, const std::vector<RealT>& sample_weights )
 {
 	auto _b(b);
 
 	return inplace_block_list_intersection_weights(a,_b,sample_weights);
+}
+
+template< typename ContainerT, typename RealT >
+WeightedEdges inplace_block_list_intersection_weights_dynamic( const std::vector< ContainerT >& a, std::vector< ContainerT >& b, const std::vector<RealT>& sample_weights )
+{
+	using std::cbegin; using std::cend; using std::begin;
+
+	using real_t = RealT;
+
+	WeightedEdges intersections; intersections.reserve(a.size()*b.size());
+
+	for( std::size_t i=0; i < a.size(); ++i )
+	{
+		//auto& ai = a[i];
+		auto ai( a[i] ); // make a copy
+		for( std::size_t j=0; j < b.size() && !ai.empty(); ++j )
+		{
+			if( b[j].empty() ) { continue; }
+			else
+			{
+				if( has_overlap(ai,b[j]) )
+				{
+					const auto result = apegrunt::inplace_set_differences_and_for_each_in_intersection( ai, b[j], apegrunt::gatherer<real_t>(sample_weights.data()) );
+					if( result.sum != 0 )
+					{
+						intersections.emplace_back(i,j,result.sum);
+					}
+				}
+			}
+		}
+	}
+
+	return intersections;
+}
+
+template< typename ContainerT, typename RealT >
+WeightedEdges block_list_intersection_weights_dynamic( const std::vector< ContainerT >& a, const std::vector< ContainerT >& b, const std::vector<RealT>& sample_weights )
+{
+	//auto _a(a);
+	auto _b(b); // make a copy
+
+	return inplace_block_list_intersection_weights_dynamic(a,_b,sample_weights);
 }
 
 template< typename StateT >
