@@ -22,7 +22,6 @@
 #define APEGRUNT_VECTOR_INTERFACE_HPP
 
 #include "Vector_forward.h" // consistency check
-#include "Array_view_forward.h"
 
 namespace apegrunt {
 

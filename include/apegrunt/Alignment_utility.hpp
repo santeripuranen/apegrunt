@@ -37,7 +37,6 @@
 #include "StateVector_forward.h"
 #include "StateVector_state_types.hpp"
 #include "StateVector_utility.hpp"
-#include "Alignment_factory.hpp"
 #include "Alignment_StateVector_weights.hpp"
 
 #include "Loci_parsers.hpp"
