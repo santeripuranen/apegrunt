@@ -32,6 +32,8 @@
 #include "IntegerSequence_operations_forward.h"
 #include "IntegerSequence_iterator.hpp"
 
+#include "Apegrunt_utility.hpp"
+
 namespace apegrunt {
 
 template< typename RangeT >
@@ -46,9 +48,10 @@ public:
 	using iterator = const_iterator;
 
 	using container_t = std::vector< range_t >;
+	using back_inserter_t = apegrunt::iterator::back_insert_iterator< container_t >;
 
 	IntegerSequence() : m_back_inserter( m_storage ), m_size(0), m_hash(0), m_block_mask(0) { }
-	IntegerSequence( const value_type& value ) : m_back_inserter( m_storage ), m_size(0), m_hash(0), m_block_mask(0) { this->push_back(value); }
+	IntegerSequence( value_type value ) : m_back_inserter( m_storage ), m_size(0), m_hash(0), m_block_mask(0) { this->push_back(value); }
 	IntegerSequence( const my_type& other )
 	: m_storage(other.m_storage),
 	  m_back_inserter(other.m_back_inserter, m_storage), // need to pass reference to the newly _copied_ m_storage when copy-constructing back_inserter. The regular back_inserter copy constructor would copy a reference to the old m_storage. This is an issue for example when reallocating std::vector<IntegerSequence>.
@@ -118,7 +121,7 @@ public:
 
 	// An IntegerSequence is empty if its internal storage contains nothing.
 	// More consistent performance (O(1)) than "size() != 0", as is_empty() has no side effects.
-	inline bool is_empty() const { return m_storage.empty(); }
+	inline bool empty() const { return m_storage.empty(); }
 
 	// check if the container contains the specified value. O(log N) complexity.
 	inline bool contains( const value_type& value ) const
@@ -132,7 +135,7 @@ public:
 	// Return number of stored values. Best case performance is O(1), worst case O(N), where N is the size of the internal container.
 	inline std::size_t size() const { /*if( !m_storage.empty() && !m_size ) */ { this->update_size(); } return m_size; }
 	inline std::size_t storagesize() const { return m_storage.size(); }
-	inline std::size_t bytesize() const { return sizeof(range_t) * m_storage.size(); }
+	inline std::size_t bytesize() const { return sizeof(range_t) * m_storage.size() /*+ sizeof(container_t)+sizeof(back_inserter_t)+sizeof(std::size_t)*2+sizeof(block_mask_type)*/; }
 
 	inline std::size_t hash() const { return m_hash == 0 ? this->cache_the_hash() : m_hash; } // return cached hash, creating the hash value as needed
 
@@ -155,7 +158,7 @@ public:
 	{
 		static const auto N=std::numeric_limits<uint8_t>::digits;
 
-		std::size_t bs{0};
+		std::size_t bs(0);
 
 		for( const auto& element: m_storage )
 		{
@@ -173,7 +176,7 @@ private:
 	using block_mask_type = uint64_t;
 
 	container_t m_storage;
-	apegrunt::iterator::back_insert_iterator< container_t > m_back_inserter;
+	back_inserter_t m_back_inserter;
 	mutable std::size_t m_size;
 	mutable std::size_t m_hash;
 	block_mask_type m_block_mask;
