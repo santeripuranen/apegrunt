@@ -67,7 +67,7 @@ public:
     inline bool operator<( const my_type& rhs ) const { return m_position < rhs.m_position; }
 
     inline const std::type_info& type() const { return typeid(my_type); }
-    inline std::shared_ptr<my_type> clone() const { auto pos = m_position; return std::make_shared<my_type>( std::move(pos) ); }
+    inline std::unique_ptr<my_type> clone() const { auto pos = m_position; return std::make_unique<my_type>( std::move(pos) ); }
 
 private:
     typename container_t::iterator m_position;
@@ -106,7 +106,7 @@ public:
     inline bool operator<( const my_type& rhs ) const { return m_position < rhs.m_position; }
 
     inline const std::type_info& type() const { return typeid(my_type); }
-    inline std::shared_ptr<my_type> clone() const { auto pos = m_position; return std::make_shared<my_type>( std::move(pos) ); }
+    inline std::unique_ptr<my_type> clone() const { auto pos = m_position; return std::make_unique<my_type>( std::move(pos) ); }
 
 private:
     typename container_t::const_iterator m_position;

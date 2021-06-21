@@ -340,14 +340,14 @@ public:
 		return make_Alignment_ptr( *this );
 	}
 
-    inline const_iterator cbegin() const { return const_iterator( std::make_shared<const_iterator_impl>( m_rows.cbegin() ) ); }
-    inline const_iterator cend() const { return const_iterator( std::make_shared<const_iterator_impl>( m_rows.cend() ) ); }
+    inline const_iterator cbegin() const { return const_iterator( std::make_unique<const_iterator_impl>( m_rows.cbegin() ) ); }
+    inline const_iterator cend() const { return const_iterator( std::make_unique<const_iterator_impl>( m_rows.cend() ) ); }
 
     inline const_iterator begin() const { return this->cbegin(); }
     inline const_iterator end() const { return this->cend(); }
 
-    inline iterator begin() { return iterator( std::make_shared<iterator_impl>( m_rows.begin() ) ); }
-    inline iterator end() { return iterator( std::make_shared<iterator_impl>( m_rows.end() ) ); }
+    inline iterator begin() { return iterator( std::make_unique<iterator_impl>( m_rows.begin() ) ); }
+    inline iterator end() { return iterator( std::make_unique<iterator_impl>( m_rows.end() ) ); }
 
     inline value_type operator[]( std::size_t index ) const { return m_rows[index]; }
 
