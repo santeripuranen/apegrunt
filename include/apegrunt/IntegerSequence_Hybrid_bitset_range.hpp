@@ -43,31 +43,31 @@ template<> struct Hybrid_bitset_range_element_internal<uint64_t> { using type=ui
 template< typename IndexT, bool Aligned >
 struct alignas(sizeof(IndexT)) Hybrid_bitset_range_element
 {
+#ifndef NDEBUG
 #pragma message("NOTE: internal range is 10 bits for value_type=uint16_t, 19 bits for value_type=uint32_t and 36 bits for value_type=uint64_t")
+#endif // !NDEBUG
 	using value_type = IndexT;
 	using index_t = typename Hybrid_bitset_range_element_internal<value_type>::type;
 	using my_type = Hybrid_bitset_range_element<value_type,Aligned>;
 	using aligned = std::integral_constant<bool, Aligned>;
 	using block_mask_type = uint64_t;
 
-	static constexpr index_t create_range_flag_mask() { return index_t(1) << std::numeric_limits<index_t>::digits-1; } // set the most significant bit
+	static constexpr index_t create_range_flag_mask() { return index_t(1) << (std::numeric_limits<index_t>::digits-1); } // set the most significant bit
 	static constexpr index_t popcnt( index_t mask ) { index_t n(0); while( mask ) { ++n; mask >>= 1; } return n; }
 
 	enum { ELEMENT_SIZE = std::numeric_limits<value_type>::digits }; // 16, 32, 64
-	enum { BITSTRING_SIZE = std::numeric_limits<index_t>::digits }; // 8, 16, 32
+//	enum { BITSTRING_SIZE = std::numeric_limits<index_t>::digits }; // 8, 16, 32
 	enum { RANGE_FLAG_MASK = my_type::create_range_flag_mask() };
 	enum { RANGE_UNFLAG_MASK = (index_t)~my_type::create_range_flag_mask() };
 	enum { MODULO_MASK=std::numeric_limits<index_t>::digits-1 }; // 0x7 for 8-bit, 0xF for 16-bit, 0x1F for 32-bit and 0x3F for 64-bit
 	enum { MODULO_NSTEPS=my_type::popcnt(MODULO_MASK) }; // 3, 4, 5
 	enum { RANGE = std::numeric_limits<index_t>::digits-1 + my_type::popcnt(MODULO_MASK) }; // numeric range in number of bits: 10 bits, 19 bits, 36 bits
-	enum { BLOCK_MASK=Hybrid_bitset_range_element_internal<value_type>::BLOCK_MASK };
-	enum { BLOCK_NSTEPS=my_type::popcnt(BLOCK_MASK) };
-	enum { INTL_BLOCK_NSTEPS=my_type::popcnt(BLOCK_MASK)-MODULO_NSTEPS };
+	enum { BLOCK_NSTEPS=my_type::popcnt(Hybrid_bitset_range_element_internal<value_type>::BLOCK_MASK) };
 
 	Hybrid_bitset_range_element( ) : m_payload(0) { } // zero-initialize
-	explicit Hybrid_bitset_range_element( value_type value ) : m_pos( value >> MODULO_NSTEPS ), m_bitfield(1 << (value & MODULO_MASK)) { }
-	Hybrid_bitset_range_element( value_type value, index_t bitfield ) : m_pos(value >> MODULO_NSTEPS), m_bitfield(bitfield) { } // trust that 'value' is properly aligned
-	Hybrid_bitset_range_element( const my_type& other, index_t bitfield ) noexcept : m_pos(other.m_pos & RANGE_UNFLAG_MASK), m_bitfield(bitfield) { } // other could be a range, so strip any range flag
+	explicit Hybrid_bitset_range_element( value_type value ) : m_bitfield(1 << (value & MODULO_MASK)), m_pos( value >> MODULO_NSTEPS ) { }
+	Hybrid_bitset_range_element( value_type value, index_t bitfield ) :  m_bitfield(bitfield), m_pos(value >> MODULO_NSTEPS) { } // trust that 'value' is properly aligned
+	Hybrid_bitset_range_element( const my_type& other, index_t bitfield ) noexcept : m_bitfield(bitfield), m_pos(other.m_pos & RANGE_UNFLAG_MASK) { } // other could be a range, so strip any range flag
 	Hybrid_bitset_range_element( const my_type& other ) : m_payload(other.m_payload) { }
 	Hybrid_bitset_range_element( my_type&& other ) : m_payload(std::move(other.m_payload)) { }
 
