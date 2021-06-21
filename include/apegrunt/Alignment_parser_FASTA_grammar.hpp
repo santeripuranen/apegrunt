@@ -74,9 +74,12 @@ struct Alignment_parser_FASTA_grammar
 				qi::eps[ qi::_a = apegrunt::parsers::lazy_make_shared<alignment_t>()() ]
 			 >>	*( // parse zero or more sequences
 				   qi::char_(s_fasta_tag)
-				>> sequence_name[ qi::_b = phx::bind( &alignment_t::get_new_sequence, phx::bind( &alignment_ptr_t::get, qi::_a ), qi::_1 ) ] // pass a raw ptr
+				//>> sequence_name[ qi::_b = phx::bind( &alignment_t::get_new_sequence, phx::bind( &alignment_ptr_t::get, qi::_a ), qi::_1 ) ] // pass a raw ptr
+				>> sequence_name[ qi::_b = phx::bind( &alignment_t::get_new_sequence, qi::_a, qi::_1 ) ] // pass a shared_ptr
 				>> FASTA_alignment_sequence( qi::_b ) // pass a raw ptr
 			 )
+			 >> qi::eps[ phx::bind( &alignment_t::set_nloci, qi::_a, phx::bind( &alignment_t::statevector_t::size, qi::_b ) ) ] // set number of loci
+			 >> qi::eps[ phx::bind( &alignment_t::finalize, qi::_a ) ] // end parse mode
 			 >> qi::eps[ qi::_val = qi::_a ]
 		;
 /*
