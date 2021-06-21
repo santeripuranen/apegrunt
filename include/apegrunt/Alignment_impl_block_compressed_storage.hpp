@@ -127,7 +127,6 @@ namespace apegrunt {
 
 // forward declarations
 
-template< typename AlignmentT > class Alignment_factory;
 
 template< typename StateT >
 class Block_adder
@@ -1092,7 +1091,7 @@ private:
 	// Allow parser access to private members
 	ALIGNMENT_PARSER_GRAMMAR_FRIENDS(my_type)
 
-	friend class Alignment_factory<my_type>;
+	friend base_type; // allow base class access to private members of this class
 
 	/// Generator interface
 
