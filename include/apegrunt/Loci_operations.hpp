@@ -36,13 +36,26 @@ namespace apegrunt {
 template<typename LociT=Loci_impl_default_storage<std::size_t> >
 Loci_ptr operator-( Loci_ptr lhs, Loci_ptr rhs )
 {
-	std::vector<std::size_t> combined; combined.reserve( lhs->size() - rhs->size() ); // speculative
+	std::vector<std::size_t> difference; difference.reserve( lhs->size() - rhs->size() ); // speculative
 	for( auto index: lhs )
 	{
-		if( rhs->cend() == std::find( rhs->cbegin(), rhs->cend(), index ) ) { combined.push_back( index ); }
+		if( rhs->cend() == std::find( rhs->cbegin(), rhs->cend(), index ) ) { difference.push_back( index ); }
 	}
-	return make_Loci_ptr<LociT>( std::move( combined ) );
+	return make_Loci_ptr<LociT>( std::move( difference ) );
 }
+
+std::ostream& operator<< ( std::ostream& os, const Loci* locilist )
+{
+	for( auto i: *locilist ) { os << " " << i; }
+	return os;
+}
+
+std::ostream& operator<< ( std::ostream& os, const Loci_ptr& locilist )
+{
+	os << locilist.get();
+	return os;
+}
+
 
 } // namespace apegrunt
 

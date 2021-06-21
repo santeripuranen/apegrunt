@@ -22,7 +22,11 @@
 #ifndef APEGRUNT_LOCI_IMPL_BASE_HPP
 #define APEGRUNT_LOCI_IMPL_BASE_HPP
 
-#include "Loci.h"
+#include <boost/serialization/serialization.hpp>
+#include <boost/serialization/nvp.hpp>
+
+#include "Loci_interface.hpp"
+//#include "Loci.h"
 
 namespace apegrunt {
 
@@ -37,7 +41,7 @@ public:
 	Loci_impl_base() { }
 	~Loci_impl_base() { }
 
-	Loci_impl_base( const std::string& id_string ) : m_id_string(id_string) { }
+	explicit Loci_impl_base( const std::string& id_string ) : m_id_string(id_string) { }
 
 	const std::string& id_string() const { return m_id_string; }
 	void set_id_string( const std::string& id_string ) { m_id_string = id_string; }

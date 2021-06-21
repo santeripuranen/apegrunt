@@ -31,7 +31,7 @@
 #include <boost/iostreams/device/mapped_file.hpp> // for boost::iostreams::mapped_file
 #include <boost/filesystem/operations.hpp> // includes boost/filesystem/path.hpp
 
-#include "Loci.h"
+//#include "Loci.h"
 #include "Loci_impl_default_storage.hpp"
 #include "Loci_parser_grammar.hpp"
 
@@ -78,6 +78,7 @@ Loci_ptr parse_Loci_list( const std::string& infilename, std::size_t base_index=
 		{
 			loci->set_id_string( filepath.stem().c_str() );
 		}
+
 		mmap.close();
 	}
 	return loci;
@@ -108,7 +109,7 @@ Loci_ptr make_Loci_list( std::vector<std::size_t>&& loci_list, std::size_t base_
 {
 	return make_Loci_ptr<LociT>(std::move(loci_list));
 }
-
+/*
 Loci_ptr create_random_Loci_list(
 		std::size_t n_loci,
 		std::size_t sample_count, // number of samples
@@ -128,11 +129,11 @@ Loci_ptr create_random_Loci_list(
 	auto accept_list = std::vector<std::size_t>();
 	accept_list.reserve( sample_count );
 
-	for( auto i=0; i < sample_count; ++i ) { accept_list.push_back( grand() ); }
+	for( std::size_t i=0; i < sample_count; ++i ) { accept_list.push_back( grand() ); }
 
 	return make_Loci_list( std::move(accept_list), 0 );
 }
-
+*/
 } // namespace apegrunt
 
 #endif // APEGRUNT_LOCI_PARSERS_HPP

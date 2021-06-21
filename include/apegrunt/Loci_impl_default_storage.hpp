@@ -31,7 +31,7 @@
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/nvp.hpp>
 
-#include "Loci.h"
+//#include "Loci.h"
 #include "Loci_impl_base.hpp"
 
 namespace apegrunt {

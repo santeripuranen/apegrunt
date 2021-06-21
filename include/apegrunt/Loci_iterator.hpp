@@ -24,6 +24,7 @@
 #include <string>
 #include <functional> // for std::hash
 #include <memory> // for std::unique_ptr and std::make_unique
+#include <vector>
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/nvp.hpp>
