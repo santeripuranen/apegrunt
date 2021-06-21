@@ -24,6 +24,8 @@
 
 #include <vector>
 #include <ostream>
+#include <tuple>
+#include <utility>
 
 #include "IntegerSequence_forward.h"
 #include "IntegerSequence_iterator.hpp"
@@ -331,69 +333,74 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_intersection(
 	container_t result;
 
 	// nothing to intersect?
-	if( !a.has_overlap(b) ) { return result; } // this test should suffice; covers cases where either a or b, or both a and b, are empty
-
-	auto aitr = cbegin(a.storage());
-	const auto aenditr = cend(a.storage());
-
-	auto bitr = cbegin(b.storage());
-	const auto benditr = cend(b.storage());
-
-	while( aitr != aenditr && bitr != benditr )
+	if( a.has_overlap(b) ) // this test should suffice; covers cases where either a or b, or both a and b, are empty
 	{
-		if( !(aitr->range_end() > (*bitr)()) ) { do { ++aitr; } while( aitr != aenditr && !(aitr->range_end() > (*bitr)())); } // linear search
-        else
-        {
-            if( !(bitr->range_end() > (*aitr)()) ) { do { ++bitr; } while( bitr != benditr && !(bitr->range_end() > (*aitr)()) ); } // linear search
-            else // *aitr and *bitr overlap in some way
-            {
-            	if( aitr->is_range() )
-                {
-                	if( bitr->is_range() ) // both aitr and bitr are ranges
-                	{
-                		auto intersection( range_intersection( *aitr, *bitr ) ); // will always succeed, since overlap is guaranteed in this branch
+		auto aitr = cbegin(a.storage());
+		const auto aenditr = cend(a.storage());
 
-                		// update positions
-                		if( !(aitr->range_end() > intersection.range_end() ) ) { ++aitr; }
-                		if( !(bitr->range_end() > intersection.range_end() ) ) { ++bitr; }
+		auto bitr = cbegin(b.storage());
+		const auto benditr = cend(b.storage());
 
-                		result.push_back( intersection );
-                 	}
-                	else // aitr is a range, but bitr is not
-                	{
-                		result.push_back( *bitr );
-
-                		// update positions
-                		if( ++bitr != benditr && !(aitr->range_end() > (*bitr)()) ) { ++aitr; }
-                	}
-                }
-            	else
-            	{
-					if( bitr->is_range() ) // bitr is a range, but aitr is not
+		while( aitr != aenditr && bitr != benditr )
+		{
+			//if( aitr->range_end() <= bitr->range_begin() ) { do { ++aitr; } while( aitr != aenditr && aitr->range_end() <= bitr->range_begin() ); }
+			if( aitr->range_end() <= bitr->range_begin() ) { while( ++aitr != aenditr && aitr->range_end() <= bitr->range_begin() ); }
+			//if( aitr->range_end() <= bitr->range_begin() ) { while( ++aitr != aenditr && aitr->range_end() < bitr->range_begin() ); }
+			else
+			{
+				//if( bitr->range_end() <= aitr->range_begin() ) { do { ++bitr; } while( bitr != benditr && bitr->range_end() <= aitr->range_begin() ); }
+				if( bitr->range_end() <= aitr->range_begin() ) { while( ++bitr != benditr && bitr->range_end() <= aitr->range_begin() ); }
+				//if( bitr->range_end() <= aitr->range_begin() ) { while( ++bitr != benditr && bitr->range_end() < aitr->range_begin() ); }
+				else // *aitr and *bitr overlap in some way
+				{
+					if( aitr->is_range() )
 					{
-						result.push_back( *aitr );
-
-						// update positions
-						if( ++aitr != aenditr && !(bitr->range_end() > (*aitr)()) ) { ++bitr; }
-					}
-					else // neither aitr nor bitr are ranges, so (*aitr)() == (*bitr)() must hold; equivalent to if( !aitr->is_range() && !bitr->is_range() )
-					{
-						const auto bitfield = aitr->get_bitfield() & bitr->get_bitfield();
-						if( bitfield )
+						if( bitr->is_range() ) // both aitr and bitr are ranges
 						{
-							result.emplace_back( value_type( (*aitr)(), bitfield ) );
+							// fast-forward to the end of shared range
+							auto intersection( range_intersection( *aitr, *bitr ) ); // will always succeed, since overlap is guaranteed in this branch. There will by design not be overlap with anything already in storage.
+
+							// update positions
+							if( aitr->range_end() == intersection.range_end() ) { ++aitr; }
+							if( bitr->range_end() == intersection.range_end() ) { ++bitr; }
+
+							result.push_back( std::move(intersection) );
 						}
+						else // aitr is a range, but bitr is not
+						{
+							result.push_back(*bitr);
 
-						// update positions
-						++aitr;
-						++bitr;
+							// update positions
+							if( aitr->range_end() == bitr->range_end() ) { ++aitr; }
+							++bitr;
+						}
 					}
-            	}
-            }
-        }
-    }
+					else
+					{
+						if( bitr->is_range() ) // bitr is a range, but aitr is not
+						{
+							result.push_back(*aitr);
 
-	result.shrink_to_fit();
+							// update positions
+							if( bitr->range_end() == aitr->range_end() ) { ++bitr; }
+							++aitr;
+						}
+						else // neither aitr nor bitr are ranges, so (*aitr)() == (*bitr)() must hold; equivalent to if( !aitr->is_range() && !bitr->is_range() )
+						{
+							const auto bitfield = aitr->get_bitfield() & bitr->get_bitfield();
+							if( bitfield ) { result.emplace_back( value_type(*aitr, bitfield) ); }
+
+							// update positions
+							++aitr;
+							++bitr;
+						}
+					}
+				}
+			}
+		}
+		result.shrink_to_fit();
+	}
+
 	return result;
 }
 
@@ -967,7 +974,7 @@ struct gather_intersection
 	inline void operator()( const ElementT& element ) { intersection.push_back(element); }
 
 	inline intersection_t&& get() { return std::move(intersection); }
-	inline bool is_empty() const { return intersection.is_empty(); }
+	inline bool empty() const { return intersection.empty(); }
 
 	IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > intersection;
 };
@@ -1110,20 +1117,12 @@ UnaryFunction inplace_set_differences_and_for_each_in_intersection(
 		UnaryFunction f
 	)
 {
-	//using container_t = IntegerSequence< Hybrid_bitset_range_element<IndexT,true> >;
-	//using return_t = UnaryFunction;
 	using value_type = Hybrid_bitset_range_element<IndexT,true>;
-	//using index_t = typename value_type::value_type;
-
 	using std::cbegin; using std::cend;
 
 	// nothing to gather?
 	if( !a.has_overlap(b) ) { return f; } // this test should suffice; covers cases where either a or b, or both a and b, are empty
-// /*
-	// clear occlusion masks (we'll rebuild them while constructing sets a-not-b and b-not-a)
-	a.clear_block_mask();
-	b.clear_block_mask();
-// */
+
 	auto& astor = a.storage();
 	auto& bstor = b.storage();
 
@@ -1135,6 +1134,12 @@ UnaryFunction inplace_set_differences_and_for_each_in_intersection(
 
 	auto anb = aitr; // a-not-b; this is the leading edge of the result, and anb <= aitr will hold
 	auto bna = bitr; // b-not-a; this is the leading edge of the result, and bna <= bitr will hold
+
+// /*
+	// clear occlusion masks (we'll rebuild them while constructing sets a-not-b and b-not-a)
+	a.clear_block_mask();
+	b.clear_block_mask();
+// */
 
 	while( aitr != aenditr && bitr != benditr )
 	{
@@ -1159,8 +1164,6 @@ UnaryFunction inplace_set_differences_and_for_each_in_intersection(
                 		}
 
 						// update positions
-                		//if( !(aitr->range_end() > intersection.range_end() ) ) { ++aitr; }
-                		//if( !(bitr->range_end() > intersection.range_end() ) ) { ++bitr; }
                 		if( aitr->range_end() == intersection.range_end() ) { ++aitr; }
                 		if( bitr->range_end() == intersection.range_end() ) { ++bitr; }
                 	}
@@ -1173,26 +1176,20 @@ UnaryFunction inplace_set_differences_and_for_each_in_intersection(
                 		{
                 			// do we need to insert a new range element for the left-over range?
                 			if( anb >= aitr ) {
-                				//std::cout << "anb >= aitr d=" << std::distance(anb,aitr) << std::endl;
                 				anb = astor.emplace( anb ); // emplace default-constructed value_type
                 				aitr = anb+1; aenditr = end(astor); // replace invalidated iterators
                 			}
     						// set the left-over range
                 			aitr->set_range( bitr->range_end(), aitr->range_end() );
                 		}
-                		else { ++aitr; }
+                		else { ++aitr; } // the range was completely consumed
 
                 		anb->set( *bitr, ~bitr->get_bitfield() );
 						a.append_block_mask(*anb);
-						++anb;
-						//std::cout << "  a) move" << std::endl;
 
 						// update positions
-						// !(aitr->range_end() > (*bitr)())
-						// aitr->range_end() <= bitr->range_begin()
-                 		//if( ++bitr != benditr && aitr->range_end() <= bitr->range_begin() ) { ++aitr; }
-						//++aitr;
-						++bitr;
+						++anb;
+						++bitr; // bitr is not a range; always increment
                 	}
                 }
             	else
@@ -1213,38 +1210,31 @@ UnaryFunction inplace_set_differences_and_for_each_in_intersection(
     						// set the left-over range
     						bitr->set_range( aitr->range_end(), bitr->range_end() );
                 		}
-                		else { ++bitr; }
+                		else { ++bitr; } // the range was completely consumed
 
                 		bna->set( *aitr, ~aitr->get_bitfield() );
 						b.append_block_mask(*bna);
-						++bna;
-						//std::cout << "  b) move" << std::endl;
 
 						// update positions
-						//if( ++aitr != aenditr && bitr->range_end() <= aitr->range_begin() ) { ++bitr; }
-						++aitr;
+						++bna;
+						++aitr; // aitr is not a range; always increment
 					}
 					else // neither aitr nor bitr are ranges and (*aitr)() == (*bitr)()
 					{
 						const auto bitfield = aitr->get_bitfield() & bitr->get_bitfield();
-						//const index_t bitfield = aitr->get_bitfield() & bitr->get_bitfield();
 						if( bitfield ) // some overlap
 						{
 							f( value_type( *aitr, bitfield ) );
 
 							const auto bfa = aitr->get_bitfield() & ~bitfield;
-							//index_t bfa = aitr->get_bitfield() & ~bitfield;
-							if( bfa ) { /*std::cout << "a2) move" << std::endl;*/ anb->set( *aitr, bfa ); a.append_block_mask(*anb); ++anb; }
+							if( bfa ) { anb->set( *aitr, bfa ); a.append_block_mask(*anb); ++anb; }
 
 							const auto bfb = bitr->get_bitfield() & ~bitfield;
-							//index_t bfb = bitr->get_bitfield() & ~bitfield;
-							if( bfb ) { /*std::cout << "b2) move" << std::endl;*/ bna->set( *bitr, bfb ); b.append_block_mask(*bna); ++bna; }
+							if( bfb ) { bna->set( *bitr, bfb ); b.append_block_mask(*bna); ++bna; }
 						}
 						else // no overlap
 						{
-							//std::cout << "swap(a2)=" << std::distance(anb,aitr) << "/" << std::distance(aitr,aenditr) << std::endl;
 							std::swap( *anb, *aitr ); a.append_block_mask(*anb); ++anb;
-							//std::cout << "swap(b2)=" << std::distance(bna,bitr) << "/" << std::distance(bitr,benditr) << std::endl;
 							std::swap( *bna, *bitr ); b.append_block_mask(*bna); ++bna;
 						}
 
@@ -1258,18 +1248,10 @@ UnaryFunction inplace_set_differences_and_for_each_in_intersection(
     }
 
 	// add anything that wasn't already processed above
-	//for( ; aitr != aenditr; ++aitr ) { /*std::cout << "swap(a3)=" << std::distance(anb,aitr) << "/" << std::distance(aitr,aenditr) << std::endl; if(std::distance(aitr,aenditr) < 0) { exit(0); }*/ std::swap(*anb,*aitr); a.append_block_mask(*anb); ++anb; }
 	while( aitr != aenditr ) { std::swap(*anb,*aitr); a.append_block_mask(*anb); ++anb; ++aitr; }
-	//if( std::distance(anb,aitr) != 0 ) { for( ; aitr != aenditr; ++aitr ) { std::swap(*anb,*aitr); a.append_block_mask(*anb); ++anb; } }
-	//else { for( ; aitr != aenditr; ++aitr ) { a.append_block_mask(*anb); ++anb; } }
-	//if( anb != aenditr ) { astor.erase( anb, aenditr ); }
 	astor.erase( anb, aenditr );
 
-	//for( ; bitr != benditr; ++bitr ) { /*std::cout << "swap(b3)=" << std::distance(bna,bitr) << "/" << std::distance(bitr,benditr) << std::endl; if(std::distance(bitr,benditr) < 0) { exit(0); }*/ std::swap(*bna,*bitr); b.append_block_mask(*bna); ++bna; }
 	while( bitr != benditr ) { std::swap(*bna,*bitr); b.append_block_mask(*bna); ++bna; ++bitr; }
-	//if( std::distance(bna,aitr) != 0 ) { for( ; bitr != benditr; ++bitr ) { std::swap(*bna,*bitr); b.append_block_mask(*bna); ++bna; } }
-	//else { for( ; bitr != benditr; ++bitr ) { b.append_block_mask(*bna); ++bna; } }
-	//if( bna != benditr ) { bstor.erase( bna, benditr ); }
 	bstor.erase( bna, benditr );
 
 	//anb.shrink_to_fit();
@@ -1285,15 +1267,11 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
 		const IntegerSequence< Hybrid_bitset_range_element<IndexT,true> >& b
 	)
 {
-	//std::cout << "apegrunt::set_union(Hybrid_bitset_range_element): a.size()=" << a.size() << " a.m_storage.size()=" << a.m_storage.size() << " | b.size()=" << b.size() << " b.m_storage.size()=" << b.m_storage.size() << std::endl;
 	using container_t = IntegerSequence< Hybrid_bitset_range_element<IndexT,true> >;
-	//using range_type = typename container_t::range_t;
-	//using value_type = typename range_type::value_type;
-
 	using std::cbegin; using std::cend;
 
-	if( a.is_empty() ) { if( b.is_empty() ) { return container_t(); } else { return container_t(b); } }
-	else if( b.is_empty() ) { return container_t(a); }
+	if( a.empty() ) { if( b.empty() ) { return container_t(); } else { return container_t(b); } }
+	else if( b.empty() ) { return container_t(a); }
 
 	auto aitr = cbegin(a.storage());
 	const auto aenditr = cend(a.storage());
@@ -1310,7 +1288,7 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
         {
         	if( aitr->is_range() )
         	{
-    			if( !theunion.is_empty() && storage.back().is_range() )
+    			if( !theunion.empty() && storage.back().is_range() )
     			{
     				const auto extended = fuse_range( storage.back(), *aitr );
     				if( extended ) { storage.back() = std::move(extended); }
@@ -1318,7 +1296,7 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
     			}
 				else { storage.emplace_back( *aitr ); }
         	}
-            else if( !((*aitr)() < ( theunion.is_empty() ? 0 : storage.back().range_end() )) )
+            else if( !((*aitr)() < ( theunion.empty() ? 0 : storage.back().range_end() )) )
 			{
 				storage.emplace_back( *aitr );
 			}
@@ -1326,12 +1304,11 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
         }
         else
         {
-        	//if( bpos < apos )
             if( (*bitr)() < (*aitr)() )
         	{
             	if( bitr->is_range() )
             	{
-        			if( !theunion.is_empty() && storage.back().is_range() )
+        			if( !theunion.empty() && storage.back().is_range() )
         			{
         				const auto extended = fuse_range( storage.back(), *bitr );
         				if( extended ) { storage.back() = std::move(extended); }
@@ -1339,7 +1316,7 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
         			}
     				else { storage.emplace_back( *bitr ); }
             	}
-                else if( !((*bitr)() < ( theunion.is_empty() ? 0 : storage.back().range_end() )) )
+                else if( !((*bitr)() < ( theunion.empty() ? 0 : storage.back().range_end() )) )
                 {
     				storage.emplace_back( *bitr );
     			}
@@ -1352,7 +1329,7 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
             		if( bitr->is_range() )
             		{
             			const auto abunion = fuse_range( *aitr, *bitr ); // will always succeed, since range overlap is guaranteed
-        				if( !theunion.is_empty() && storage.back().is_range() )
+        				if( !theunion.empty() && storage.back().is_range() )
         				{
         					const auto extended = fuse_range( storage.back(), abunion );
         					if( extended ) { storage.back() = std::move(extended); }
@@ -1362,7 +1339,7 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
             		}
             		else
             		{
-            			if( !theunion.is_empty() && storage.back().is_range() )
+            			if( !theunion.empty() && storage.back().is_range() )
             			{
              				const auto extended = fuse_range( storage.back(), *aitr );
             				if( extended ) { storage.back() = std::move(extended); }
@@ -1373,7 +1350,7 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
             	}
             	else if( bitr->is_range() ) // bitr is range, but aitr is not
             	{
-        			if( !theunion.is_empty() && storage.back().is_range() )
+        			if( !theunion.empty() && storage.back().is_range() )
         			{
         				const auto extended = fuse_range( storage.back(), *bitr );
         				if( extended ) { storage.back() = std::move(extended); }
@@ -1406,7 +1383,7 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
 	{
 		if( itr->is_range() )
 		{
-			if( !theunion.is_empty() && storage.back().is_range() )
+			if( !theunion.empty() && storage.back().is_range() )
 			{
 				const auto extended = fuse_range( storage.back(), *itr );
 				if( extended ) { storage.back() = std::move(extended); }
@@ -1443,47 +1420,23 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
 	)
 {
 	using container_t = IntegerSequence< Hybrid_bitset_range_element<IndexT,true> >;
-	//using range_type = typename container_t::range_t;
-	//using value_type = typename range_type::value_type;
-
 	using std::cbegin; using std::cend;
 
-	//std::cout << "apegrunt::set_union(): merge=" << sets.size() << std::endl;
-	if( sets.size() == 1 ) { /*std::cout << "return" << std::endl;*/ return container_t( sets.front() ); }
-	//else { return std::accumulate( cbegin(sets), cend(sets), std::move(container_t()), [](auto debug, const auto src) { debug.merge(*src); return debug; } ); }
+	if( sets.size() == 1 ) { return container_t( sets.front() ); }
 
-	//auto debug_size(0);
 	typename container_t::block_mask_type block_mask(0);
 
 	// concatenate input sequences
-	//std::cout << "apegrunt::set_union(): reserve space"; std::cout.flush();
 	const auto size_reserve = std::accumulate( cbegin(sets), cend(sets), 0, [](auto sum, const auto& a) { return sum+a.get().storagesize(); } );
 	container_t theunion; auto& u = theunion.m_storage; u.reserve(size_reserve);
-	//std::cout << " ..done | capacity=" << u.capacity() << std::endl;
-	//std::cout << "apegrunt::set_union(): concatenate elements"; std::cout.flush();
+
 	for( const auto& src: sets ) { u.insert( u.end(), cbegin(src.get().storage()), cend(src.get().storage()) ); block_mask |= src.get().m_block_mask; }
 	theunion.update_block_mask(block_mask);
 
-	//std::cout << " ..done" << std::endl;
-
-	//std::cout << "concatenated union size=" << theunion.size() << "\n"; std::cout.flush();
-/*
-	std::cout << " size=" << theunion.size() << " [";
-	for( auto& e: u ) { std::cout << " " << e(); if(e.is_range()) { std::cout << "-" << e.range_end(); } else { std::cout << ":" << e.get_bitfield(); } }
-	std::cout << " ]" << std::endl;
-*/
 	// sort
-	//std::cout << "apegrunt::set_union(): sort elements (n=" << u.size() << ")"; std::cout.flush();
-	//std::sort( begin(u), end(u), [](const auto& a, const auto& b) { /*std::cout << " " << a() << (a()>b() ? ">" : "<=") << b();*/ return !(a() > b()); } );
 	std::sort( u.begin(), u.end() );
-	//std::cout << " ..done" << std::endl;
-/*
-	std::cout << " size=" << theunion.size(); std::cout.flush(); std::cout << " [";
-	for( auto& e: u ) { std::cout << " " << e(); if(e.is_range()) { std::cout << "-" << e.range_end(); } else { std::cout << ":" << e.get_bitfield(); } }
-	std::cout << " ]" << std::endl;
-*/
+
 	// compact & clean-up
-	//std::cout << "apegrunt::set_union(): fuse elements\n"; std::cout.flush();
 	auto pos = u.begin();
 	auto fwd = pos+1;
 
@@ -1492,11 +1445,8 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
 	{
 		if( (*pos)() < (*fwd)() )
 		{
-			//std::cout << " " << (*pos)() << "<" << (*fwd)(); std::cout.flush();
 			if( pos->range_end() < (*fwd)() )
 			{ // pos is an isolated range or a bitfield
-				//std::cout << "  isolated range/bitfield" << std::endl;
-				//theunion.update_block_mask( container_t::generate_block_mask( *pos ) );
 				std::swap( *(++pos), *fwd ); ++fwd;
 			}
 			else if( pos->is_range() )
@@ -1507,7 +1457,6 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
 					auto fused = apegrunt::fuse_range(*pos, *fwd);
 					if(fused) { *pos = fused; ++fwd; }
 					else { ++pos; std::swap(*pos,*fwd); ++fwd; }
-					//theunion.update_block_mask( container_t::generate_block_mask( *pos ) );
 				}
 				else if( pos->range_end() > (*fwd)() )
 				{
@@ -1525,14 +1474,12 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
 		}
 		else if( pos->is_range() ) // pos == fwd, but is it a range
 		{
-			//std::cout << " !(" << (*pos)() << "-" << pos->range_end() << "<" << (*fwd)() << ")"; std::cout.flush();
 			range_pos = pos;
 			if( fwd->is_range() )
 			{
 				auto fused = apegrunt::fuse_range(*pos, *fwd);
 				if(fused) { *pos = fused; ++fwd; } // ranges overlap
 				else { ++pos; std::swap( *pos, *fwd ); ++fwd; } // we've got two non-overlapping ranges; move fwd adjacent to pos, as there might be free slots (if not, then it's semantically a non-op)
-				//theunion.update_block_mask( container_t::generate_block_mask( *pos ) );
 			}
 			else
 			{
@@ -1548,8 +1495,6 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
 		}
 		else // pos == fwd, and pos is not a range, but fwd might be
 		{
-			//std::cout << " " << (*pos)() << "==" << (*fwd)(); std::cout.flush();
-
 			if( fwd->is_range() )
 			{
 				*pos = *fwd;
@@ -1560,65 +1505,24 @@ IntegerSequence< Hybrid_bitset_range_element<IndexT,true> > set_union(
 				pos->merge_bitfield( fwd->get_bitfield() );
 				if( pos->all_set() )
 				{
-					//std::cout << "range_pos=[" << range_pos->range_begin() << "," << range_pos->range_end() << ")";
-					//std::cout << " pos=[" << pos->range_begin() << "," << pos->range_end() << ") | ";
-
 					if( range_pos != u.end() && range_pos->range_end() == (*pos)() )
 					{
-						//std::cout << " extend[" << range_pos->range_begin() << "," << range_pos->range_end();
 						range_pos->set_range_end( pos->range_end() ); pos = range_pos;
-						//std::cout << "->" << pos->range_end() << ")"; std::cout.flush();
 					}
 					else
 					{
 						pos->set_range_end( pos->range_end() ); range_pos = pos;
-						//std::cout << " create[" << pos->range_begin() << "," << pos->range_end() << ")"; std::cout.flush();
 					}
 				}
-				//++fwd;
 			}
 			++fwd;
-			//theunion.update_block_mask( container_t::generate_block_mask( *pos ) );
 		}
 	}
-	//std::cout << " ..done" << std::endl;
 
 	++pos;
-	//std::cout << "apegrunt::set_union(): trim off excess"; std::cout.flush();
 	u.erase( pos, fwd ); // trim off excess elements
-	//std::cout << " ..done" << std::endl;
-	//std::cout << "apegrunt::set_union(): shrink to fit"; std::cout.flush();
 	u.shrink_to_fit(); // make it a tight fit
-	//std::cout << " ..done | capacity=" << u.capacity() << " size=" << theunion.size() << std::endl;
-/*
-	std::cout << "[";
-	for( auto& e: u ) { std::cout << " " << e(); if(e.is_range()) { std::cout << "-" << e.range_end(); } else { std::cout << ":" << e.get_bitfield(); } }
-	std::cout << " ]" << std::endl;
 
-	std::cout << "return" << std::endl;
-*/
-/*
-	// debug
-	auto debug( std::accumulate( cbegin(sets), cend(sets), std::move(container_t()), [](auto debug, const auto src) { debug.merge(src); return debug; } ) );
-	if( debug_size != theunion.size() || debug_size != debug.size() || debug.storagesize() != theunion.storagesize() )
-	{
-		std::cout << "\ndebug_size=" << debug_size << "\n";
-
-		std::cout << "union.size()=" << theunion.size() << " union.storagesize()=" << theunion.storagesize() << " ";
-		std::cout << "[";
-		for( auto& e: u ) { std::cout << " " << e(); if(e.is_range()) { std::cout << "-" << e.range_end(); } else { std::cout << ":" << e.get_bitfield(); } }
-		std::cout << " ]\n" << std::endl;
-
-		// debug: get the incrementally merged container
-		//auto debug( std::accumulate( cbegin(sets), cend(sets), std::move(container_t()), [](auto debug, const auto src) { debug.merge(*src); return debug; } ) );
-		std::cout << "debug.size()=" << debug.size() << " debug.storagesize()=" << debug.storagesize() << " ";
-		std::cout << "[";
-		for( auto& e: debug.m_storage ) { std::cout << " " << e(); if(e.is_range()) { std::cout << "-" << e.range_end(); } else { std::cout << ":" << e.get_bitfield(); } }
-		std::cout << " ]" << std::endl;
-
-		//exit(0); // temporary exit
-	}
-*/
 	return theunion;
 }
 
