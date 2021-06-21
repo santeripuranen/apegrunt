@@ -57,6 +57,12 @@ ValueVector_ptr<ValueT> parse_ValueVector( const std::string& filename )
 
 		apegrunt::parsers::ValueVector_parser_grammar< iterator_t, value_t > parser;
 		const bool success = boost::spirit::qi::phrase_parse(begin, end, parser, ascii::space, weights);
+
+		mmap.close();
+		if( !success )
+		{
+			return {};
+		}
 	}
 
 	return weights;

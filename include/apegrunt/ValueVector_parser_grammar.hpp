@@ -72,16 +72,18 @@ struct ValueVector_parser_grammar
 				instead it's evaluated immediately and only once. lazy_make_shared evaluates
 				lazily each time the parent parser is successfully called. */
 				qi::eps[ qi::_a = apegrunt::parsers::lazy_make_shared<value_vector_t>()() ]
-			 >> *( single_entry( phx::bind( &value_vector_ptr_t::get, qi::_a ) ) ) // pass a raw ptr
+			 //>> *( single_entry( phx::bind( &value_vector_ptr_t::get, qi::_a ) ) ) // pass a raw ptr
+			 >> *( single_entry( qi::_a ) ) // pass the shared_ptr
 			 >> qi::eps[ qi::_val = qi::_a ]
 		;
 	}
 
-	qi::rule<IteratorT, void(value_vector_t* const), space_t>
+	//qi::rule<IteratorT, void(value_vector_t* const), space_t>
+	qi::rule<IteratorT, void(value_vector_ptr_t), space_t>
 		single_entry
 	;
 
-	qi::rule< IteratorT, ValueVector_ptr<value_t>(), qi::locals< std::shared_ptr<value_vector_t> >, ascii::space_type > start;
+	qi::rule< IteratorT, ValueVector_ptr<value_t>(), qi::locals< value_vector_ptr_t >, ascii::space_type > start;
 };
 
 } // namespace parsers
