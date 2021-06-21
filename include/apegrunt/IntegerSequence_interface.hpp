@@ -153,25 +153,6 @@ public:
 
 	void shrink_to_fit() { m_storage.shrink_to_fit(); }
 
-	// for testing purposes only
-	inline std::size_t compressed_bytesize() const
-	{
-		static const auto N=std::numeric_limits<uint8_t>::digits;
-
-		std::size_t bs(0);
-
-		for( const auto& element: m_storage )
-		{
-			++bs; // first byte in compressed element would never be null
-			for( std::size_t i=1; i<range_t::ELEMENT_SIZE/N; ++i )
-			{
-				bs += (0 == element.template block<N>(i));
-			}
-		}
-
-		return bs;
-	}
-
 private:
 	using block_mask_type = uint64_t;
 

@@ -50,6 +50,22 @@ template< typename T >
 std::size_t bytesize( const IntegerSequence<T>& v ) { return v.bytesize(); }
 
 template< typename T >
+//std::size_t bytesize( const std::vector<T>& v ) { return v.size()*sizeof(T); }
+std::size_t bytesize( const std::vector<T>& v ) { return sizeof(std::vector<T>)+sizeof(T)*v.size(); }
+
+template< typename RangeT >
+bool has_overlap( const IntegerSequence< RangeT >& a, const IntegerSequence< RangeT >& b ) { return a.has_overlap(b); }
+
+template< typename T >
+bool has_overlap( const std::vector<T>& a, const std::vector<T>& b ) { return true; } // this is a dummy implementation
+
+template< typename RangeT, typename T >
+bool contains( const IntegerSequence<RangeT>& v, T query ) { return v.contains(query); }
+
+template< typename T >
+bool contains( const std::vector<T>& v, T query ) { return std::binary_search(v.begin(),v.end(),query); }
+
+template< typename T >
 inline IntegerSequence< T >& operator<< ( IntegerSequence< T >& container, typename T::value_type value )
 {
 	container.push_back(value); return container;
@@ -204,7 +220,7 @@ std::vector<IndexT> set_intersection( const std::vector<IndexT>& a, const std::v
 	std::vector<index_t> isect;
 	isect.reserve( std::min(a.size(), b.size()) ); // can't need more than this, but might be less
 
-	const auto isect_end = std::set_intersection(
+	/* const auto isect_end = */ std::set_intersection(
 			cbegin(a), cend(a),
 			cbegin(b), cend(b),
 			std::back_inserter(isect)
@@ -266,13 +282,35 @@ struct lazy_set_union
 	lazy_set_union() : m_sets() { }
 	~lazy_set_union() = default;
 
-	inline my_type& add( const SetT& set ) {  m_sets.emplace_back( wrap_t(set) ); return *this; }
+	inline my_type& add( const SetT& set ) { m_sets.emplace_back( wrap_t(set) ); return *this; }
 	inline my_type& operator|=( const SetT& set ) { return this->add(set); }
 	inline operator SetT() const { return apegrunt::set_union(m_sets); }
 
 	std::vector< std::reference_wrapper< const SetT > > m_sets;
 };
 
+// intersect and differences for std::vector; used only for testing purposes (so that code will compile)
+template< typename IndexT, typename UnaryFunction >
+UnaryFunction inplace_set_differences_and_for_each_in_intersection(
+		std::vector<IndexT>& a,
+		std::vector<IndexT>& b,
+		UnaryFunction f
+	)
+{
+	using std::cbegin; using std::cend;
+	/* const auto isect_end = */ std::set_intersection( cbegin(a), cend(a),	cbegin(b), cend(b),	f );
+
+	std::vector<IndexT> aout;
+	std::vector<IndexT> bout;
+
+	/* const auto adiff_end = */ std::set_difference( cbegin(a), cend(a), cbegin(b), cend(b), std::back_inserter(aout) );
+	std::swap(a,aout);
+
+	/* const auto bdiff_end = */ std::set_difference( cbegin(b), cend(b), cbegin(a), cend(a), std::back_inserter(bout) );
+	std::swap(b,bout);
+
+	return f;
+}
 // complement
 
 // symmetric difference
