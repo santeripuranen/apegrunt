@@ -122,6 +122,9 @@ public:
     // Create a deep copy of a subset of positions (data columns)
     Alignment_ptr<state_t> subset( const Loci_ptr positions, std::ostream *out=nullptr ) const { return this->subset_impl( positions, out ); }
 
+    // Create a deep copy of a subsample of, um, samples (data rows)
+    Alignment_ptr<state_t> subsample( const Loci_ptr samples, std::ostream *out=nullptr ) const { return this->subsample_impl( samples, out ); }
+
     inline value_type operator[]( std::size_t index ) const { return this->square_bracket_operator_impl( index ); }
 
     //> Return the number of sequences contained in the alignment
@@ -175,6 +178,8 @@ private:
     virtual value_type square_bracket_operator_impl( std::size_t index ) const = 0;
 
     virtual Alignment_ptr<state_t> subset_impl( const Loci_ptr positions, std::ostream *out=nullptr ) const = 0;
+    virtual Alignment_ptr<state_t> subsample_impl( const Loci_ptr samples, std::ostream *out=nullptr ) const = 0;
+
     virtual std::size_t size_impl() const = 0;
     virtual typename w_frequency_t::value_type effective_size_impl() const = 0;
 

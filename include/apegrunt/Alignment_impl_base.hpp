@@ -117,6 +117,28 @@ public:
 		return subset_alignment;
 	}
 
+    Alignment_ptr<state_t> subsample( const Loci_ptr samples, std::ostream *out=nullptr ) const
+    {
+		using boost::get;
+
+		if( samples->size() == 0 ) { return Alignment_ptr<StateT>(); }
+
+		auto subsample_alignment = std::make_shared<AlignmentT>();
+		subsample_alignment->set_id_string( this->id_string() + ( samples->id_string().empty() ? "" : "."+samples->id_string() ) );
+		subsample_alignment->set_loci_translation( this->get_loci_translation() );
+		subsample_alignment->set_n_original_positions( this->n_original_positions() );
+
+		for( auto seqindex: *samples )
+		{
+			auto sequence = (*this)[seqindex];
+			auto new_sequence = StateVector_mutator<typename AlignmentT::statevector_t>( subsample_alignment->get_new_sequence( sequence->id_string() ) );
+			//new_sequence.set_weight( sequence->weight() ); // not transferring weights here, since the set of samples changes
+			for( const auto state: sequence ) {	new_sequence(state); }
+		}
+
+		return subsample_alignment;
+    }
+
 	typename w_frequency_t::value_type effective_size() const
 	{
 		using real_t = typename w_frequency_t::value_type;
@@ -201,6 +223,8 @@ private:
     value_type square_bracket_operator_impl( std::size_t index ) const override { return (*static_cast<const_cast_t>(this))[index]; }
 
     Alignment_ptr<state_t> subset_impl( const Loci_ptr positions, std::ostream *out=nullptr ) const override { return static_cast<const_cast_t>(this)->subset(positions,out); }
+    Alignment_ptr<state_t> subsample_impl( const Loci_ptr samples, std::ostream *out=nullptr ) const override { return static_cast<const_cast_t>(this)->subsample(samples,out); }
+
     std::size_t size_impl() const override { return static_cast<const_cast_t>(this)->size(); }
     typename w_frequency_t::value_type effective_size_impl() const override { return static_cast<const_cast_t>(this)->effective_size(); }
 
