@@ -1,7 +1,7 @@
 /** @file Apegrunt.cpp
 	Utility for manipulation and space-efficient storage of column-aligned categorical data.
 
-	Copyright (c) 2017-2019 Santeri Puranen.
+	Copyright (c) 2017-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -41,10 +41,6 @@ int main(int argc, char **argv)
 	namespace po = boost::program_options;
 	namespace fs = boost::filesystem;
 
-	#ifndef APEGRUNT_NO_TBB // Threading with Threading Building Blocks
-	tbb::task_scheduler_init tbb_task_scheduler(tbb::task_scheduler_init::deferred); // Threading task scheduler
-	#endif // #ifndef APEGRUNT_NO_TBB
-
 	using namespace apegrunt;
 	using std::exit;
 
@@ -79,10 +75,6 @@ int main(int argc, char **argv)
 		{
 			exit(EXIT_FAILURE);
 		}
-		#ifndef APEGRUNT_NO_TBB // Threading with Threading Building Blocks
-		Apegrunt_options::set_threads( Apegrunt_options::threads() > 0 ? Apegrunt_options::threads() : tbb_task_scheduler.default_num_threads() );
-		//Apegrunt_options::threads() > 0 ? tbb_task_scheduler.initialize( Apegrunt_options::threads() ) : tbb_task_scheduler.initialize() ); // Threading task scheduler
-		#endif // #ifndef APEGRUNT_NO_TBB
 
 		// Apegrunt options
 		apegrunt_options.set_verbose( Apegrunt_options::verbose() );
@@ -95,28 +87,6 @@ int main(int argc, char **argv)
 		std::cout << Apegrunt_options::s_get_version_string() << "\n"
 				  << Apegrunt_options::s_get_copyright_notice_string() << "\n"
 				  << std::endl;
-
-		#ifndef APEGRUNT_NO_TBB // Threading with Threading Building Blocks
-		Apegrunt_options::threads() > 0 ? tbb_task_scheduler.initialize( Apegrunt_options::threads() ) : tbb_task_scheduler.initialize(); // Threading task scheduler
-		if( Apegrunt_options::verbose() )
-		{
-			*Apegrunt_options::get_out_stream()
-				<< "Apegrunt: TBB interface version " << TBB_INTERFACE_VERSION << "\n"
-				<< "Apegrunt: TBB runtime interface version " << tbb::TBB_runtime_interface_version() << "\n"
-				<< "Apegrunt: TBB task scheduler is " << ( tbb_task_scheduler.is_active() ? "ACTIVE" : "INACTIVE" );
-			if( tbb_task_scheduler.is_active() )
-			{
-				*Apegrunt_options::get_out_stream()
-					<< ": using "
-					//<< ( Apegrunt_options::threads() > 0 ? Apegrunt_options::threads() : tbb_task_scheduler.default_num_threads() )
-					<< Apegrunt_options::threads()
-					<< " threads"
-				;
-			}
-			*Apegrunt_options::get_out_stream() << "\n" << std::endl;
-		}
-		//aracne::ARACNE_options::set_threads( Apegrunt_options::threads() > 0 ? Apegrunt_options::threads() : tbb_task_scheduler.default_num_threads() );
-		#endif // #ifndef APEGRUNT_NO_TBB
 	}
 
 	catch( std::exception& e )

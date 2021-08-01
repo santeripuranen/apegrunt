@@ -12,5 +12,4 @@ include( initialize_cmake_module_path.cmake NO_POLICY_SCOPE )
 
 # Setup of external dependencies
 include( boost.cmake NO_POLICY_SCOPE )
-include( tbb.cmake NO_POLICY_SCOPE )
 include( cuda.cmake NO_POLICY_SCOPE )

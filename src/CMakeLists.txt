@@ -10,7 +10,6 @@ include_directories(
 	${CMAKE_CURRENT_BINARY_DIR}
 	${APEGRUNT_INCLUDE_DIR}
 	${Boost_INCLUDE_DIRS}
-	${TBB_INCLUDE_DIRS}
 )
 
 link_directories( ${Boost_LIBRARY_DIRS} )
@@ -120,12 +119,6 @@ if( NOT APEGRUNT_NO_BOOST )
 	target_link_libraries( libapegrunt ${Boost_LIBRARIES} )
 	target_link_libraries( libapegrunt ${Boost_LIBRARIES} libz.a liblzma.a )
 	target_link_libraries( apegrunt ${Boost_LIBRARIES} )
-endif()
-
-# Add TBB libraries
-if( NOT APEGRUNT_NO_TBB )
-	target_link_libraries( libapegrunt ${TBB_LIBRARIES} )
-	target_link_libraries( apegrunt ${TBB_LIBRARIES} )
 endif()
 
 # Add pthreads library if building in UNIX
