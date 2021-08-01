@@ -88,6 +88,8 @@ public:
 
 	enum { N=block_type::N };
 
+	using adder_block_type = typename apegrunt::State_block<char,N>;
+
 	using parent_t = Alignment_impl_block_compressed_storage< my_type >;
 	using block_index_t = typename base_type::block_index_t;
 	using block_index_container_t = typename base_type::block_index_container_t;
@@ -413,6 +415,7 @@ private:
 	block_adder_ptr m_block_adder;
 	mutable block_index_container_ptr m_block_indices;
 	block_type m_cache;
+	//adder_block_type m_cache;
 	mutable block_type m_access_cache_block;
 	mutable std::size_t m_access_cache_col;
 	std::array< std::size_t, number_of_states<state_t>::value > m_frequencies;
@@ -430,6 +433,7 @@ private:
 	enum { MODULO_NBITS=my_type::popcnt<std::size_t>(MODULO_MASK) };
 
 	// Parser interface
+// /*
 	template< typename T >
 	inline void push_back( const T& state )
 	//inline void push_back( const char& state )
@@ -437,47 +441,48 @@ private:
 		m_cache[m_pos] = state; ++m_pos; m_dirty=true; ++m_size;
 		if( N == m_pos ) { this->flush_block_buffer(); }
 	}
-
-	template< typename T >
-	inline void push_backN( const T *state )
-	//inline void push_back( const char& state )
+// */
+	inline void append( const std::string& state_string )
+	//inline void append( std::string state_string )
 	{
-		for( auto i=0; i < N; ++i )
-		{
-			m_cache[i] = *(state+i);
-		}
-		m_dirty=true; m_pos=N; // m_size+=N;
-		this->flush_block_buffer();
-	}
-
-	inline bool append( const std::string& state_string )
-	{
-		m_block_indices.reserve( m_block_indices.size() + state_string.size()/N + (state_string.size() % N == 0 ? 0 : 1) );
-		for( const auto& state: state_string ) { this->push_back( state ); }
-		this->flush_block_buffer();
-		return true;
-	}
-
-	inline bool appendN( const std::string& state_string )
-	{
-		const auto Nfull_blocks = state_string.size() / N;
+		const auto Nfull_blocks = state_string.size() >> MODULO_NBITS;
 		const auto Nreminder_chars = state_string.size() & MODULO_MASK;
 
-		m_block_indices.reserve( m_block_indices.size() + Nfull_blocks + (Nreminder_chars ? 1 : 0) );
-		for( auto i=0; i < Nfull_blocks; ++i ) { this->push_backN( state_string.data()+i*N ); }
-		m_size += Nfull_blocks*N;
+		auto& adder = *m_block_adder;
+		adder.reserve(m_block_col+Nfull_blocks+bool(Nreminder_chars));
+
+		if( Nfull_blocks )
+		{
+			auto r = boost::irange(std::size_t(0),Nfull_blocks); // can't use step_size here, as that would mess up parallel for_each
+			auto worker = [&](const auto i) { adder.insert( state_string.data()+i*N, m_block_col+i, this->id() ); };
+
+	#if __cplusplus < 201703L
+	#ifdef _OPENMP
+			// going all-in parallel with the current code kills performance; restrict to 2 threads for now
+			omp_set_num_threads( std::min(2,apegrunt::Apegrunt_options::threads()) );
+	#pragma omp parallel for
+			for( auto i: r ) { worker(i); }
+	#else // no _OPENMP
+			std::for_each( r.begin(), r.end(), worker ); // C++14 and earlier
+	#endif // _OPENMP
+	#else // __cplusplus
+			// going all-in parallel with the current code kills performance; run sequentially for now
+			std::for_each( std::execution::seq, r.begin(), r.end(), worker ); // C++17 and later
+	#endif // __cplusplus
+
+			m_block_col+=Nfull_blocks;
+			m_size += Nfull_blocks*N;
+		}
+
 		if( Nreminder_chars )
 		{
-			for( auto i=0; i < Nreminder_chars; ++i ) { this->push_back( *(state_string.data()+Nfull_blocks*N+i) ); }
-			this->flush_block_buffer();
+			const auto ptr=state_string.data()+Nfull_blocks*N;
+			adder.insert( adder_block_type(ptr,Nreminder_chars), m_block_col, this->id() );
+			m_dirty=false; m_size+=Nreminder_chars; m_pos+=Nreminder_chars;
+			++m_block_col;
 		}
-		return true;
-	}
 
-	void assign( const std::string& state_string )
-	{
-		this->clear();
-		this->append(state_string); /* this->flush_block_buffer(); */ // don't flush twice, when the implementation uses append()
+		m_access_cache_col = m_block_col; // effectively one past the end
 	}
 
 	//> clear internal state, with the exception of link to parent Alignment
@@ -496,26 +501,9 @@ private:
 	{
 		if(m_dirty)
 		{
-/* Original/reference code
-			if( m_block_storage->size() < m_block_col+1 ) { m_block_storage->emplace_back( 1, m_cache ); m_block_indices.push_back(0); }
-			else
-			{
-				using std::cbegin; using std::cend;
-				auto& block_list = (*m_block_storage)[m_block_col];
-				auto list_pos = std::find( cbegin(block_list), cend(block_list), m_cache );
-				//auto list_pos = block_list.find( m_cache );
-				if( list_pos == cend(block_list) )
-				{
-					block_list.emplace_back( m_cache ); m_block_indices.push_back( block_list.size()-1 );
-				}
-				else
-				{
-					m_block_indices.push_back( std::distance( cbegin(block_list), list_pos ) );
-				}
-			}
-*/
-			// new TST-based routine
-			m_block_indices.push_back( m_block_adder->insert( m_cache, m_block_col, m_index ) );
+#pragma message("WARNING: flush_block_buffer() block insert temporarily disabled")
+			std::cout << "apegrunt: StateVector_iterator_impl_block_compressed_alignment_storage::flush_block_buffer() called" << std::endl;
+			//m_block_adder->insert( m_cache, m_block_col, this->id() );
 
 			if( N  == m_pos ) // test if cache is full or partially filled
 			{
@@ -583,19 +571,29 @@ private:
 		}
 	};
 	friend class deleter;
-
 };
 
 template< typename StateT >
 class StateVector_mutator< StateVector_impl_block_compressed_alignment_storage< StateT > >
 {
 public:
+	using state_t = StateT;
+	using my_type = StateVector_mutator< StateVector_impl_block_compressed_alignment_storage< state_t > >;
 	using statevector_t = StateVector_impl_block_compressed_alignment_storage< StateT >;
 	StateVector_mutator( statevector_t *statevector ) : m_statevector(statevector) { }
-	~StateVector_mutator() { m_statevector->flush_block_buffer(); } // flush when done
+	~StateVector_mutator()
+	{
+		m_statevector->flush_block_buffer(); // flush when done
+		//m_statevector->m_access_cache_col = m_statevector->m_block_adder->size(); // can't query block_adder size here: it's not guaranteed to be populated yet
+		m_statevector->m_access_cache_col = apegrunt::get_number_of_blocks(m_statevector->size()); // effectively one past the end
+		m_statevector->m_access_cache_block.clear();
+	}
 
 	template< typename StateT2 >
-	void operator()( StateT2 state ) { m_statevector->push_back( state ); }
+	inline void operator()( StateT2 state ) { m_statevector->push_back( state ); }
+
+	inline std::size_t size() const { return m_statevector->size(); }
+	inline void set_size( std::size_t size ) { m_statevector->m_size = size; }
 
 	template< typename RealT >
 	inline void set_weight( RealT weight ) { m_statevector->set_weight( weight ); }

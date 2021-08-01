@@ -123,67 +123,97 @@ namespace apegrunt {
 // forward declarations
 
 
-template< typename StateT >
+// Helper for selecting TST-key blocking factor based on state type.
+template< typename StateT > struct TST_block_size { static const std::size_t value=std::max(1,std::min(apegrunt::StateBlock_size/2,8)); };
+template<> struct TST_block_size<apegrunt::nucleic_acid_state_t> { static const std::size_t value=std::max(1,std::min(apegrunt::StateBlock_size/2,16)); };
+template<> struct TST_block_size<char> { static const std::size_t value=std::max(1,std::min(apegrunt::StateBlock_size/2,16)); };
+
+template< typename StateT, typename InternalState=StateT, std::size_t Cache=0 >
 class Block_adder
 {
 public:
 	using state_t = StateT;
-	using my_type = Block_adder<state_t>;
+	using internal_state_t = InternalState;
+	using my_type = Block_adder<state_t,internal_state_t>;
 
 	using block_index_t = typename Alignment<state_t>::block_index_t;
 	using block_accounting_t = typename Alignment<state_t>::block_accounting_t;
 	using block_accounting_ptr = typename Alignment<state_t>::block_accounting_ptr;
+	using block_accounting_container_t = typename Alignment<state_t>::block_accounting_container_t;
 
 	using block_storage_t = typename Alignment<state_t>::block_storage_t;
 	using block_storage_ptr = typename Alignment<state_t>::block_storage_ptr;
 
 	using block_type = typename Alignment<state_t>::block_type;
+	using internal_block_type = typename Alignment<internal_state_t>::block_type;
 
-	using block_finder_t = apegrunt::TernarySearchTree<block_type,block_index_t>;
+	using block_finder_t = apegrunt::TernarySearchTree<internal_block_type,block_accounting_container_t,TST_block_size<internal_state_t>::value>;
+	//using block_finder_t = apegrunt::TernarySearchTree<block_type,block_index_t>;
 	using block_finder_storage_t = std::vector< block_finder_t >;
 
-	//Block_storage() = default;
+	Block_adder() = delete;
 
-	Block_adder( block_storage_ptr block_storage )
-	: m_block_storage_ptr( block_storage )
-	{
-	}
-/*
 	Block_adder( block_storage_ptr block_storage, block_accounting_ptr block_accounting )
 	: m_block_storage_ptr( block_storage ),
-	  m_block_accounting_ptr( block_accounting )
-	{
-	}
-*/
-	Block_adder( my_type&& other )
-	: m_block_storage_ptr( other.m_block_storage_ptr ),
-	  //m_block_accounting_ptr( other.m_block_accounting_ptr ),
-	  m_block_finders( std::move( other.m_block_finders ) )
+	  m_block_accounting_ptr( block_accounting ),
+	  m_extracted(false)
 	{
 	}
 
-	//block_index_t add( std::size_t block_col, const block_type& block, block_index_t owner_id )
-	inline block_index_t insert( const block_type& block, std::size_t block_col, block_index_t source_index )
+	Block_adder( my_type&& other )
+	: m_block_storage_ptr( other.m_block_storage_ptr ),
+	  m_block_accounting_ptr( other.m_block_accounting_ptr ),
+	  m_block_finders( std::move( other.m_block_finders ) ),
+	  m_extracted(false)
 	{
-		block_index_t block_index(0);
-		if( m_block_storage_ptr->size() <= block_col )
+	}
+
+	inline std::size_t size() const { return m_block_storage_ptr->size(); }
+
+	// cached version
+	template< std::size_t W = Cache, std::enable_if_t<(W!=0),bool> = true >
+	inline void reserve( std::size_t size )
+	{
+		if( size > m_block_buffer.size() )
 		{
-			m_block_storage_ptr->emplace_back( 1, block );
-			//m_block_accounting_ptr->emplace_back( 1, source_index );
-			m_block_finders.emplace_back( block, block_index );
+			const std::lock_guard<std::mutex> lock(m_buffer_resize_mtx);
+			m_block_buffer.resize(size);
+			//m_block_finders.resize(size);
 		}
-		else
+	}
+
+
+	// write-thru version
+	template< std::size_t W = Cache, std::enable_if_t<(W==0),bool> = false >
+	inline void reserve( std::size_t size )
+	{
+		if( size > m_block_finders.size() )
 		{
-			const block_index_t candidate_index = (*m_block_storage_ptr)[block_col].size();
-			block_index = m_block_finders[block_col].insert( block, candidate_index )->value();
-			if( candidate_index == block_index )
-			{
-				(*m_block_storage_ptr)[block_col].emplace_back( block );
-				//(*m_block_accounting_ptr)[block_col].emplace_back();
-			}
-			//(*m_block_accounting_ptr)[block_col][block_index].push_back(source_index);
+			const std::lock_guard<std::mutex> lock(m_finder_resize_mtx);
+			m_block_finders.resize(size);
 		}
-		return block_index;
+	}
+
+	// cached version -- this should be the preferred way most of the time; to keep the search tree
+	// hot in cpu cache during insert, we'll perform insertion bursts. This requires that we temporarily
+	// store blocks in a block buffer that we then flush in one go into the actual search tree.
+	template< typename Block, std::size_t W = Cache, std::enable_if_t<(W!=0),bool> = true >
+	inline void insert( Block block, std::size_t block_col, block_index_t source_index )
+	{
+		// we won't ever actually hit these if reserve was properly called
+		//if( m_block_finders.size() <= block_col ) { const std::lock_guard<std::mutex> lock(m_finder_resize_mtx); m_block_finders.resize(block_col+1); }
+		if( m_block_buffer.size() <= block_col ) { const std::lock_guard<std::mutex> lock(m_buffer_resize_mtx); m_block_buffer.resize(block_col+1); }
+
+		m_block_buffer[block_col].emplace_back( block, source_index );
+		if( m_block_buffer[block_col].size() == Cache )	{ this->flush(block_col); }
+	}
+
+	// write-thru version
+	template< typename Block, std::size_t W = Cache, std::enable_if_t<(W==0),bool> = false >
+	inline void insert( Block block, std::size_t block_col, block_index_t source_index )
+	{
+		if( m_block_finders.size() <= block_col ) { const std::lock_guard<std::mutex> lock(m_finder_resize_mtx); m_block_finders.resize(block_col+1); }
+		m_block_finders[block_col].insert( block )->value.push_back(source_index);
 	}
 
 	inline block_type get( std::size_t block_col, block_index_t block_index ) const
@@ -191,38 +221,178 @@ public:
 		return (m_block_storage_ptr->size() > block_col) ? ( (*m_block_storage_ptr)[block_col].size() > block_index ? (*m_block_storage_ptr)[block_col][block_index] : block_type() ) : block_type();
 	}
 
-	inline block_storage_ptr get_block_storage() { return m_block_storage_ptr; }
+	inline block_storage_ptr get_block_storage() { if(!m_extracted) { this->extract(); } return m_block_storage_ptr; }
+	inline block_accounting_ptr get_block_accounting() { if(!m_extracted) { this->extract(); } return m_block_accounting_ptr; }
+
+	// cached version -- flush all
+	template< std::size_t W = Cache, std::enable_if_t<(W!=0),bool> = true >
+	inline void flush() // flush all
+	{
+		if( m_block_finders.size() < m_block_buffer.size() ) { const std::lock_guard<std::mutex> lock(m_finder_resize_mtx); m_block_finders.resize(m_block_buffer.size()); }
+		for( auto dest_and_src: apegrunt::zip_range( m_block_finders, m_block_buffer ) )
+		{
+			using boost::get;
+			auto& tree = get<0>(dest_and_src);
+			for( const auto& pair: get<1>(dest_and_src) )
+			{
+				tree.insert(pair.first)->value.push_back(pair.second);
+			}
+			get<1>(dest_and_src).clear();
+		}
+	}
+
+	// cached version -- flush single
+	template< std::size_t W = Cache, std::enable_if_t<(W!=0),bool> = true >
+	inline void flush( std::size_t col ) // flush only col
+	{
+		if( m_block_finders.size() < m_block_buffer.size() ) { const std::lock_guard<std::mutex> lock(m_finder_resize_mtx); m_block_finders.resize(m_block_buffer.size()); }
+
+		auto& tree = m_block_finders[col];
+		for( const auto& pair: m_block_buffer[col] )
+		{
+			tree.insert(pair.first)->value.push_back(pair.second);
+		}
+		m_block_buffer[col].clear();
+	}
+
+	// write-thru version
+	template< std::size_t W = Cache, std::enable_if_t<(W==0),bool> = false >
+	inline void flush() { }
+
+	void extract()
+	{
+		if( m_block_finders.empty() && m_block_buffer.empty() ) { m_extracted = true; return; }
+
+		this->flush();
+
+		auto& blocks = *m_block_storage_ptr;
+		auto& accounting = *m_block_accounting_ptr;
+
+		blocks.reserve( m_block_finders.size() );
+		accounting.reserve( m_block_finders.size() );
+
+		m_statistics.ntrees = m_block_finders.size();
+
+		for( auto& tree: m_block_finders )
+		{
+			m_statistics.nkeys += tree.nkeys();
+			m_statistics.nunique += tree.nunique_keys();
+			m_statistics.nnodes += tree.nnodes();
+			m_statistics.minodes = std::min( m_statistics.minodes, tree.nnodes() );
+			m_statistics.manodes = std::max( m_statistics.manodes, tree.nnodes() );
+			m_statistics.bytesize += tree.bytesize();
+
+			accounting.emplace_back(); blocks.emplace_back();
+			auto& a = accounting.back(); auto& b = blocks.back();
+			auto fb( [&a, &b, this] (auto node) mutable { /*m_statistics.ipbn_distrib(node->value.size()); m_statistics.ipbk_distrib(node->value.storage().size());*/ a.emplace_back( std::move(node->value) ); b.emplace_back(std::move(node->key)); } );
+			tree.for_each( fb );
+		}
+		m_extracted = true;
+		m_block_finders.clear(); // clean-up
+	}
 
 	inline void statistics( std::ostream *out=nullptr ) const
 	{
-		if( out )
+		//static const std::size_t N=8;
+		if( !out ) { return; }
+
+		if( !m_extracted ) { /*this->extract();*/ return; }
+
 		{
-			std::size_t nkeys(0), nunique(0), nnodes(0), bytesize(0), minodes(std::numeric_limits<std::size_t>::max() ), manodes(0);
-			for( const auto& tree: m_block_finders )
+			if( m_statistics.ntrees == 0 )
 			{
-				nkeys += tree.nkeys();
-				nunique += tree.nunique_keys();
-				nnodes += tree.nnodes();
-				bytesize += tree.bytesize();
-				minodes = std::min( minodes, tree.nnodes() );
-				manodes = std::max( manodes, tree.nnodes() );
+				*out << "apegrunt: B|3: parse tree is empty\n"; // out->flush();
 			}
-			*out << "apegrunt: B|3:"
-					<< " tree size = " << apegrunt::memory_string( bytesize )
-					//<< " #keys unique/total=" << nunique << "/" << nkeys << " [CR=" << double(nkeys)/double(nunique) << "]"
-					<< " (nodes = " << nnodes << " [min/mean/max per tree = "
-					<< minodes << "/" << std::size_t(double(nnodes)/double(m_block_finders.size())) << "/" << manodes << "])"
-					//<< " nodesize=" << sizeof(typename block_finder_t::node_t) << " bytes"
-					<< "\n"
-			;
-			//std::cout << "apegrunt: sizeof(block_accounting_itr)=" << sizeof(typename block_accounting_container_t::const_iterator) << std::endl;
+			else
+			{
+				*out << "apegrunt: B|3:"
+						<< " parse tree size = " << apegrunt::memory_string( m_statistics.bytesize )
+						<< " (" << double(m_statistics.bytesize)/double(m_statistics.nkeys)*8 << " bits/stored object)"
+						<< " | nodes = " << m_statistics.nnodes << " [min/mean/max per tree = "
+						<< m_statistics.minodes << "/" << std::size_t(double(m_statistics.nnodes)/double(m_statistics.ntrees)) << "/" << m_statistics.manodes << "]"
+						//<< " global<" << N << ">(" << this->nblocksglobal<N>() << ")"
+/*
+						<< " index(mean=" << boost::accumulators::distribution_mean(m_statistics.ipbn_distrib)
+						<< ",std=" << boost::accumulators::distribution_std(m_statistics.ipbn_distrib)
+						<< ",bins=" << boost::accumulators::distribution_bincount(m_statistics.ipbn_distrib)
+						<< ")"
+						<< " bm(mean=" << boost::accumulators::distribution_mean(m_statistics.ipbk_distrib)
+						<< ",std=" << boost::accumulators::distribution_std(m_statistics.ipbk_distrib)
+						<< ",bins=" << boost::accumulators::distribution_bincount(m_statistics.ipbk_distrib)
+						<< ")"
+*/
+						<< "\n"
+				;
+/*
+				auto csv_file = apegrunt::get_unique_ofstream( "bm_index_distribution.csv" );
+				*csv_file->stream() << apegrunt::accumulators::csv(acc::distribution(m_statistics.ipbn_distrib));
+				//*csv_file->stream() << apegrunt::accumulators::csv(apegrunt::accumulators::distribution_cumulative(m_statistics.ipb_distrib));
+				auto csv_file2 = apegrunt::get_unique_ofstream( "bm_block_distribution.csv" );
+				*csv_file2->stream() << apegrunt::accumulators::csv(acc::distribution(m_statistics.ipbk_distrib));
+*/
+/*
+				auto& accounting = *m_block_accounting_ptr;
+				for( auto& col: accounting ) { for( auto& index: col ) {
+						for( auto& e: index.storage() )
+						{
+							std::cout << "payload=" << e.m_payload << " pos=" << e.m_pos << " bitfield=" << e.m_bitfield << std::endl;
+						}
+				} }
+*/
+			}
 		}
 	}
 
 private:
 	block_storage_ptr m_block_storage_ptr;
-	//block_accounting_ptr m_block_accounting_ptr;
+	block_accounting_ptr m_block_accounting_ptr;
 	block_finder_storage_t m_block_finders;
+	std::vector< std::vector< std::pair<internal_block_type,std::size_t> > > m_block_buffer;
+	bool m_extracted;
+	std::mutex m_buffer_resize_mtx;
+	std::mutex m_finder_resize_mtx;
+
+	struct statistics
+	{
+		statistics()
+		: ntrees(0), nkeys(0), nunique(0), nnodes(0), minodes(std::numeric_limits<std::size_t>::max() ), manodes(0), bytesize(0) { }
+//		  ipbn_distrib(acc::tag::distribution::binwidth=1), ipbk_distrib(acc::tag::distribution::binwidth=1) { }
+		std::size_t ntrees, nkeys, nunique, nnodes, minodes, manodes, bytesize;
+//		acc::accumulator_set<double, acc::stats<acc::tag::std(acc::from_distribution),acc::tag::distribution_bincount> > ipbn_distrib;
+//		acc::accumulator_set<double, acc::stats<acc::tag::std(acc::from_distribution),acc::tag::distribution_bincount> > ipbk_distrib;
+	} m_statistics;
+};
+template< std::size_t BlockSize >
+struct Subset_block_structure_builder
+{
+	static constexpr std::size_t N=BlockSize;
+	using index_storage_t = std::vector< std::vector<std::size_t> >;
+	using const_iterator = typename index_storage_t::const_iterator;
+
+	Subset_block_structure_builder() = delete;
+	explicit Subset_block_structure_builder( std::size_t blockn ) : m_nfill(0), m_blockn(blockn) { m_src_posns.emplace_back(); }
+
+	inline bool add( std::size_t pos )
+	{
+		if( m_nfill == N ) { return false; } // we're full
+
+		if( !m_src_posns.back().empty() && apegrunt::get_block_index( m_src_posns.back().back() ) != apegrunt::get_block_index(pos) ) { m_src_posns.emplace_back(); }
+		m_src_posns.back().emplace_back(pos); ++m_nfill;
+
+		return true;
+	}
+
+	inline std::size_t size() const { return m_nfill; }
+	inline std::size_t nblocks() const { return m_src_posns.size(); }
+	inline std::size_t block_index() const { return m_blockn; }
+
+	inline const_iterator begin() const { return m_src_posns.begin(); }
+	inline const_iterator end() const { return m_src_posns.end(); }
+
+	std::size_t m_nfill;
+	const std::size_t m_blockn;
+
+	index_storage_t m_src_posns;
 };
 
 template< typename StateVectorT > //=StateVector_impl_block_compressed_alignment_storage<nucleic_acid_state_t> >
@@ -261,7 +431,7 @@ public:
 	using block_storage_t = typename base_type::block_storage_t;
 	using block_storage_ptr = typename base_type::block_storage_ptr;
 
-	using block_adder_t = Block_adder<state_t>;
+	using block_adder_t = Block_adder<state_t,char,32>;
 	using block_adder_ptr = std::shared_ptr< block_adder_t >;
 
 	using block_indices_t = typename base_type::block_indices_t;
@@ -281,11 +451,9 @@ public:
 	: base_type(),
 	  m_rows(),
 	  m_block_storage( std::make_shared<block_storage_t>() ),
-	  m_block_adder( std::make_shared<block_adder_t>( m_block_storage ) )
-	  //m_block_accounting( std::make_shared<block_accounting_t>() )
-	  //m_block_adder( std::make_shared<block_adder_t>( m_block_storage, m_block_accounting ) ) // m_block_adder member should be declared after m_block_storage
+	  m_block_accounting( std::make_shared<block_accounting_t>() ),
+	  m_block_adder( std::make_shared<block_adder_t>( m_block_storage, m_block_accounting ) )
 	{
-		//m_block_adder = std::make_shared<block_adder_t>( m_block_storage, m_block_accounting );
 	}
 
 	~Alignment_impl_block_compressed_storage() = default;
@@ -294,18 +462,20 @@ public:
 		: base_type( other.id_string() ),
 		  m_rows( other.m_rows ),
 		  m_block_storage( other.m_block_storage ),
-		  //m_block_accounting( other.m_block_accounting ),
+		  m_block_accounting( other.m_block_accounting ),
 		  m_block_adder( other.m_block_adder )
 	{
+		//std::cout << "Alignment_impl_block_compressed_storage( const my_type& other )" << std::endl;
 	}
 
 	Alignment_impl_block_compressed_storage( my_type&& other ) noexcept
 		: base_type( other.id_string() ),
 		  m_rows( std::move(other.m_rows) ),
-		  m_block_storage( other.m_block_storage ),
-		  //m_block_accounting( other.m_block_accounting ),
-		  m_block_adder( other.m_block_adder )
+		  m_block_storage( std::move(other.m_block_storage) ),
+		  m_block_accounting( std::move(other.m_block_accounting) ),
+		  m_block_adder( std::move(other.m_block_adder) )
 	{
+		//std::cout << "Alignment_impl_block_compressed_storage( my_type&& other )" << std::endl;
 	}
 
 	Alignment_ptr<state_t> clone() const
@@ -511,11 +681,10 @@ private:
 	// be modified during the lifetime of a const Alignment..
 	std::vector< StateVector_ptr<state_t> > m_rows;
 	block_storage_ptr m_block_storage;
-	mutable block_accounting_ptr m_block_accounting;
+	block_accounting_ptr m_block_accounting;
 	block_adder_ptr m_block_adder; // should always be declared *after* m_block_storage
 
 	// ..but all caches may be modified and are therefore declared mutable
-	//mutable block_accounting_ptr m_block_accounting;
 	mutable frequencies_ptr m_frequencies;
 	mutable w_frequencies_ptr m_w_frequencies;
 	mutable statecount_block_storage_ptr m_statecount_blocks;
@@ -523,179 +692,9 @@ private:
 	mutable statecount_block_storage_ptr m_statepresence_blocks_wo_gaps;
 	mutable statecount_block_storage_ptr m_gappresence_blocks;
 
-	mutable std::mutex m_cache_block_accounting_mutex;
 	mutable std::mutex m_cache_frequencies_mutex;
 	mutable std::mutex m_cache_w_frequencies_mutex;
 	mutable std::mutex m_cache_statecount_and_statepresence_blocks_mutex;
-
-	// pull in all
-	void cache_block_accounting() const
-	{
-		//namespace acc = boost::accumulators;
-
-		//using boost::get;
-		using std::cbegin;
-		using std::cend;
-		m_block_accounting = std::make_shared<block_accounting_t>( m_block_storage->size() );
-
-		//std::size_t flat_mem = 0;
-		//std::size_t compr_mem = 0;
-
-
-// /*
-		auto& deref = *m_block_accounting;
-
-		// reserve memory as far as we can
-		for( std::size_t col=0; col < m_block_storage->size(); ++col )
-		{
-			//(*m_block_accounting)[col].resize( (*m_block_storage)[col].size() );
-			deref[col].resize( (*m_block_storage)[col].size() );
-		}
-
-		// add block indices -- the access order is really causing hurt here
-		for( std::size_t seq=0; seq < this->size(); ++seq )
-		{
-			std::size_t col=0;
-			for( const auto& block_index: m_rows[seq]->get_block_indices() )
-			{
-				//(*m_block_accounting)[col][block_index].push_back(seq);
-				deref[col][block_index].push_back(seq);
-				//(*m_block_accounting)[col][block_index] << seq; // OK, we can do this, although it's not really helpful
-				++col;
-			}
-		}
-// */
-/*
-		using boost::get;
-
-		// reserve memory as far as we can
-		for( auto zipped: apegrunt::zip_range( m_block_accounting, m_block_storage ) )
-		{
-			get<0>(zipped).resize( get<1>(zipped).size() );
-		}
-
-		// add block indices -- the access order is really causing hurt here
-		for( std::size_t seq=0; seq < this->size(); ++seq )
-		{
-			for( auto zipped: apegrunt::zip_range( m_block_accounting, m_rows[seq]->get_block_indices() ) )
-			{
-				get<0>(zipped)[ get<1>(zipped) ] << seq;
-			}
-		}
-*/
-
-/*
-		acc::accumulator_set<double, acc::stats<acc::tag::std(acc::from_distribution),acc::tag::distribution_bincount> >
-		blockcount_distribution( acc::tag::distribution::binwidth=1 );
-*/
-		// collect memory use statistics
-/*
-		for( std::size_t col=0; col < m_block_storage->size(); ++col )
-		{
-			for( const auto& index_container: (*m_block_accounting)[col] )
-			{
-				//blockcount_distribution( index_container.size() );
-				flat_mem += index_container.size()*sizeof(block_index_t);
-				compr_mem += apegrunt::bytesize(index_container);
-			}
-		}
-*/
-/*
-		{ // block pair statistics -- beware: O(N^2) in number of block cols = very costly
-			std::size_t matching_pairs = 0;
-			std::size_t naive_pairs = 0;
-			const std::size_t total_col_pairs = ( apegrunt::ipow( m_block_storage->size(), 2 ) - m_block_storage->size() ) / 2;
-			std::size_t done_col_pairs = 0;
-
-			std::cout << "apegrunt: find column pair matches" << std::endl;
-			for( std::size_t col_i=0; col_i < m_block_storage->size(); ++col_i )
-			{
-				for( std::size_t col_j=0; col_j < col_i; ++col_j )
-				{
-					std::cout << "\r  processing.. " << double(done_col_pairs)/double(total_col_pairs)*100 << " % -- found " << matching_pairs << " / " << naive_pairs << " matching pairs (" << double(matching_pairs)/double(naive_pairs) << ")"; std::cout.flush();
-					naive_pairs += (*m_block_accounting)[col_i].size() * (*m_block_accounting)[col_j].size();
-					for( const auto& index_i_container: (*m_block_accounting)[col_i] )
-					{
-						for( const auto& index_j_container: (*m_block_accounting)[col_j] )
-						{
-							// reference implementation
-							//const auto match = std::find_first_of( std::cbegin(index_i_container), std::cend(index_i_container), std::cbegin(index_j_container), std::cend(index_j_container) );
-							//if( match != std::cend(index_i_container) ) { ++matching_pairs; }
-
-							if( index_j_container.front() > index_i_container.back() || index_j_container.back() < index_i_container.front() ) { continue; }
-
-							// our index lists are sorted, so a faster binary search is applicable
-							if( index_i_container.size() < index_j_container.size() )
-							{
-								for( const auto& index: index_j_container )
-								{
-									if( index > index_i_container.back() ) { break; }
-									if( index < index_i_container.front() ) { continue; }
-									if( std::binary_search( std::cbegin(index_i_container), std::cend(index_i_container), index ) )
-									{
-										++matching_pairs;
-										break;
-									}
-								}
-							}
-							else
-							{
-								for( const auto& index: index_i_container )
-								{
-									if( index > index_j_container.back() ) { break; }
-									if( index < index_j_container.front() ) { continue; }
-									if( std::binary_search( std::cbegin(index_j_container), std::cend(index_j_container), index ) )
-									{
-										++matching_pairs;
-										break;
-									}
-								}
-							}
-						}
-					}
-					++done_col_pairs;
-				}
-			}
-
-			std::cout << "\rapegrunt: found " << matching_pairs << " / " << naive_pairs << " matching pairs (" << double(matching_pairs)/double(naive_pairs)*100 << " %)" << std::endl;
-		}
-*/
-/*
-		auto distribution_file = apegrunt::get_unique_ofstream( "block_index_distribution.csv" );
-		*distribution_file->stream() << std::fixed;
-		*distribution_file->stream() << apegrunt::accumulators::csv(acc::distribution(blockcount_distribution));
-*/
-/*
-		std::cout << " {level1"; std::cout.flush();
-		for( std::size_t col=0; col < m_block_storage->size(); ++col )
-		{
-			(*m_block_accounting)[col].resize( (*m_block_storage)[col].size() );
-
-			//std::cout << " {level2"; std::cout.flush();
-			for( std::size_t seq=0; seq < this->size(); ++seq )
-			{
-				auto query_block = m_rows[seq]->get_block(col);
-				auto block_itr = std::find( cbegin( (*m_block_storage)[col] ), cend( (*m_block_storage)[col] ), query_block );
-				if( block_itr != cend( (*m_block_storage)[col] ) )
-				{
-					using std::distance;
-					//std::cout << " {distance"; std::cout.flush();
-					(*m_block_accounting)[col][ distance( cbegin( (*m_block_storage)[col] ), block_itr ) ].push_back( seq );
-					//std::cout << "} ";
-				}
-			}
-			//std::cout << "} ";
-			for( const auto& index_container: (*m_block_accounting)[col] )
-			{
-				flat_mem += index_container.size()*sizeof(block_index_t);
-				compr_mem += apegrunt::bytesize(index_container);
-			}
-		}
-		std::cout << "} ";
-*/
-		//std::cout << "}"; std::cout.flush();
-	}
-
 
 	std::size_t m_nloci = 0;
 
@@ -813,12 +812,13 @@ private:
 
 	statevector_t* get_new_sequence( const std::string& id_string )
 	{
-		//m_rows.emplace_back( make_StateVector_ptr<statevector_t>( m_block_storage, name, reserve ) );
-		m_rows.emplace_back( make_StateVector_ptr<statevector_t>( m_block_adder, name, m_rows.size(), reserve ) );
+		m_rows.emplace_back( make_StateVector_ptr<statevector_t>( m_block_adder, m_rows.size(), id_string ) );
 		return static_cast<statevector_t*>(m_rows.back().get());
 	}
 
 	void set_nloci( std::size_t nloci ) { m_nloci = nloci; }
+
+	void finalize() { m_block_adder->extract(); }
 
 	// Allow parser access to private members
 	ALIGNMENT_PARSER_GRAMMAR_FRIENDS(my_type)
