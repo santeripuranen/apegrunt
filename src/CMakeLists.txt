@@ -77,7 +77,15 @@ elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
 	set( CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${APEGRUNT_OPTIMIZATION_FLAGS} ${APEGRUNT_CLANG_OPTIMIZATION_FLAGS} ${APEGRUNT_DEBUG_FLAGS} ${APEGRUNT_CLANG_DEBUG_FLAGS}")
 endif()
 
-#set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wignored-attributes" )
+
+### General profiling build flags
+set( APEGRUNT_PROFILE_FLAGS "-DNDEBUG -Wall -w -fno-omit-frame-pointer" ) # add "-pg" to instrument for gprof; perf is happy as long as symbols and frame pointers are present 
+
+if("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
+	set( CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_PROFILE} ${APEGRUNT_OPTIMIZATION_FLAGS} ${APEGRUNT_GCC_OPTIMIZATION_FLAGS} ${APEGRUNT_PROFILE_FLAGS}")
+elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+	set( CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${APEGRUNT_OPTIMIZATION_FLAGS} ${APEGRUNT_CLANG_OPTIMIZATION_FLAGS} ${APEGRUNT_PROFILE_FLAGS}")
+endif()
 
 
 ### Set preferred linker
@@ -110,7 +118,7 @@ if( APEGRUNT_BINARY_SOURCES )
 	# need APEGRUNT_LIBRARY_SOURCES here for the APEGRUNT_STANDALONE_BUILD macro mechanism, rather than a "target_link_libraries( libapegrunt )"
 	add_executable( apegrunt ${APEGRUNT_LIBRARY_SOURCES} ${APEGRUNT_BINARY_SOURCES} )
 	set_target_properties( apegrunt PROPERTIES COMPILE_DEFINITIONS APEGRUNT_STANDALONE_BUILD )
-	set_target_properties( apegrunt PROPERTIES COMPILE_FLAGS "--std=c++14" )
+	#set_target_properties( apegrunt PROPERTIES COMPILE_FLAGS "--std=c++14" )
 	#target_link_libraries( apegrunt libapegrunt )
 endif()
 
@@ -121,14 +129,13 @@ endif()
 
 # Add Boost libraries
 if( NOT APEGRUNT_NO_BOOST )
-	target_link_libraries( libapegrunt ${Boost_LIBRARIES} )
 	target_link_libraries( libapegrunt ${Boost_LIBRARIES} libz.a liblzma.a )
 	target_link_libraries( apegrunt ${Boost_LIBRARIES} )
 endif()
 
 # Add pthreads library if building in UNIX
 if( UNIX )
-	target_link_libraries( libapegrunt pthread )
+	target_link_libraries( libapegrunt "-Wl,-Bdynamic -lpthread" )
 	target_link_libraries( apegrunt pthread )
 endif()
 

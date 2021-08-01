@@ -209,6 +209,7 @@ public:
 		m_size = other.m_size;
 		m_dirty = other.m_dirty;
 		m_has_block_indices = other.m_has_block_indices;
+		m_is_similar_to_pimpl = other.m_is_similar_to_pimpl;
 		return *this;
 	}
 
