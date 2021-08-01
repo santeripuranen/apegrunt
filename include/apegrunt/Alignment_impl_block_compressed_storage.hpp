@@ -27,11 +27,18 @@
 #include <cfloat>
 #include <memory> // for std::enable_shared_from_this
 #include <algorithm> // for std::find
+#include <execution> // for C++17 parallel execution policies
 #include <numeric> // for std::accumulate
 #include <iterator> // for std::distance
 #include <mutex> // for std::mutex
+#include <thread>
+#include <atomic>
 #include <vector>
 #include <utility> // for std::pair
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 #include <boost/range/adaptor/indexed.hpp>
 #include <boost/range/irange.hpp>
@@ -118,9 +125,7 @@ private:
 
 namespace acc = boost::accumulators;
 
-namespace apegrunt {
 
-// forward declarations
 
 
 // Helper for selecting TST-key blocking factor based on state type.
@@ -431,6 +436,7 @@ public:
 	using block_storage_t = typename base_type::block_storage_t;
 	using block_storage_ptr = typename base_type::block_storage_ptr;
 
+	using block_unit_t = std::pair<std::vector<block_accounting_container_t>,half_block_container_t>;
 	using block_adder_t = Block_adder<state_t,char,32>;
 	using block_adder_ptr = std::shared_ptr< block_adder_t >;
 
@@ -493,6 +499,320 @@ public:
     inline iterator end() { return iterator( std::make_unique<iterator_impl>( m_rows.end() ) ); }
 
     inline value_type operator[]( std::size_t index ) const { return m_rows[index]; }
+
+    inline Alignment_ptr<state_t> subset( Loci_ptr positions, std::ostream *out=nullptr ) const
+	{
+    	using timer_t = std::chrono::steady_clock;
+    	using duration_t = typename timer_t::duration;
+		auto total_time = timer_t::now();
+		stopwatch::stopwatch cputimer(Apegrunt_options::get_out_stream()); // for timing statistics
+
+		using boost::get;
+		using std::begin; using std::end;
+		using std::cbegin; using std::cend;
+
+		if( positions->size() == 0 ) { return {}; }
+		if( positions->size() == this->n_loci() ) {	return apegrunt::make_Alignment_ptr(*this); }
+
+		if( out ) { *out << "apegrunt: create subset alignment of \"" << this->id_string() << "\"\n"; }
+
+		const auto output_frequency_mask = pow2_ceil_mask( positions->size()/100*10 ); // make it a power-of-2 close to 10%
+
+		duration_t merge_time(0);
+		duration_t actual_merge_time(0);
+		duration_t isect_time(0);
+		duration_t mtime(0);
+
+		// get a new blanco alignment and set some general alignment-level stuff
+		auto subset_alignment = std::make_shared<my_type>();
+		subset_alignment->set_id_string( this->id_string() + ( positions->id_string().empty() ? "" : "."+positions->id_string() ) );
+		subset_alignment->set_loci_translation( apegrunt::combine(this->get_loci_translation(), positions) );
+		subset_alignment->set_n_original_positions( this->n_original_positions() );
+		subset_alignment->set_nloci( positions->size() );
+
+		// initialize a shiny new set of sequences in our previously empty alignment
+		for( const auto& sequence: *this )
+		{
+			auto subset_sequence = StateVector_mutator<statevector_t>( subset_alignment->get_new_sequence( sequence->id_string() ) );
+			subset_sequence.set_weight( sequence->weight() ); // transfer weights
+			subset_sequence.set_size( positions->size() );
+		}
+
+		{ // block structure subsetting
+			using tst_type = apegrunt::TernarySearchTree< block_type, apegrunt::lazy_set_union<block_accounting_container_t>, TST_block_size<state_t>::value >;
+			//using tst_type = apegrunt::TernarySearchTree< block_type, block_accounting_container_t, TST_block_size<state_t>::value >;
+
+			const auto acc_ptr = this->get_block_accounting(); // keep shared_ptr alive
+			const auto bs_ptr = this->get_block_storage(); // keep shared_ptr alive
+			const auto& acc = *acc_ptr;
+			const auto& bs = *bs_ptr;
+
+			// figure out the new block structure
+			std::vector< Subset_block_structure_builder< apegrunt::StateBlock_size > > blocksrc; blocksrc.reserve( apegrunt::get_number_of_blocks(positions->size()) ); blocksrc.emplace_back(0);
+			for( const auto locus_index: positions )
+			{
+				if( !blocksrc.back().add( locus_index ) ) { blocksrc.emplace_back( blocksrc.size() ); blocksrc.back().add( locus_index ); }
+			}
+
+			//auto subset_accounting_ptr = subset_alignment->m_block_accounting; // keep shared_ptr alive
+			//auto& subset_accounting = *subset_accounting_ptr;
+			auto& subset_accounting = *(subset_alignment->m_block_accounting); // we alone hold subset_alignment; anything within it should stay alive unless we explicitly kill it, no?
+
+			//auto subset_blocks_ptr = subset_alignment->m_block_storage; // keep shared_ptr alive
+			//auto& subset_blocks = *subset_blocks_ptr;
+			auto& subset_blocks = *(subset_alignment->m_block_storage); // we alone hold subset_alignment; anything within it should stay alive unless we explicitly kill it, no?
+
+			// reserve memory
+			subset_accounting.resize( blocksrc.size() ); // resize so that we can safely use operator[]
+			subset_blocks.resize( blocksrc.size() ); // resize so that we can safely use operator[]
+
+			// for collecting statistics
+			std::atomic_size_t nmerge(0); // number of merge ops
+			std::atomic_size_t npisect(0); // total number of potential intersections
+			std::atomic_size_t nisect(0); // number of performed intersections
+			std::atomic_size_t nnzisect(0); // number of non-zero intersection products
+			std::atomic_size_t nnoisect(0); // number of no intersections (intersections evaded)
+			std::atomic_size_t currpos(0); // for determining output frequency
+
+			auto print_statistics = [&](std::size_t pos) {
+				*out << "\rapegrunt: processing: " << std::setw(3) << std::setfill(' ') << std::size_t(double(pos*100) / double(positions->size())) << "%";
+				out->flush();
+			};
+
+			auto fuser = [&](const auto& src)
+			{
+				std::vector<tst_type> unique_group; unique_group.reserve(src.nblocks());
+
+				assert( src.size() != 0 ); // should never be empty at this stage
+				{ // symbol resolution / symbolic merge
+					auto destposbegin(0);
+					auto start = timer_t::now();
+					for( const auto& srcblockpos: src )
+					{
+						unique_group.emplace_back(); auto& unique = unique_group.back();
+
+						const auto srcblockn = apegrunt::get_block_index( srcblockpos.front() );
+
+#ifndef NDEBUG
+						{ // consistency check
+							//std::cout << "bLOcK=" << src.block_index() << " #indices= ";
+							apegrunt::lazy_set_union<block_accounting_container_t> lazy;
+							for(const auto& a: acc[srcblockn]) { lazy |= a; }
+							block_accounting_container_t test(lazy);
+							//std::cout << test.size();
+
+							assert( test.size() == this->size() ); // every sample should be addressed exactly once
+							//std::cout << std::endl;
+						}
+#endif // NDEBUG
+
+						for( const auto a_b: apegrunt::zip_range(acc[srcblockn],bs[srcblockn]) )
+						{
+							using boost::get;
+							const auto& block = get<1>(a_b);
+							block_type synthesized;
+							auto destpos(destposbegin); // start at destposbegin, so that we can later merge block-pieces using a simple or-operation
+							for( auto srcpos: srcblockpos )
+							{
+								synthesized[destpos] = block[apegrunt::get_pos_in_block(srcpos)]; ++destpos;
+							}
+							unique.insert(synthesized)->value |= get<0>(a_b); // lazy merge; it's faster to pool up merges and evaluate them all at once later
+							//unique.insert(synthesized)->value.merge( get<0>(a_b) ); // eager merge
+							++nmerge;
+						}
+						destposbegin += srcblockpos.size();
+					}
+					merge_time += timer_t::now() - start;
+				}
+
+				assert( !unique_group.empty() ); // should never be empty at this stage
+				{
+					// intersect all in unique_group, store blocks with non-zero isect
+					block_storage_t dablocks; dablocks.reserve(unique_group.size());
+					block_accounting_t daccounting; daccounting.reserve(unique_group.size());
+
+					auto start = timer_t::now();
+					for( auto& unique: unique_group )
+					{
+						daccounting.emplace_back(); dablocks.emplace_back();
+						auto& da = daccounting.back(); auto& db = dablocks.back();
+						auto fb( [&da, &db](auto node) mutable { da.emplace_back(std::move(node->value)); db.emplace_back(std::move(node->key)); } );
+						unique.for_each( fb );
+					}
+					actual_merge_time += timer_t::now() - start;
+
+#ifndef NDEBUG
+					{ // consistency check
+						//std::cout << "BLOCK=" << src.block_index() << " #indices=[";
+						for(const auto& col: daccounting)
+						{
+							apegrunt::lazy_set_union<block_accounting_container_t> lazy;
+							for(const auto& a: col) { lazy |= a; }
+							block_accounting_container_t test(lazy);
+							//std::cout << " " << test.size();
+
+							assert( test.size() == this->size() ); // every sample should be addressed exactly once
+						}
+						//std::cout << " ]" << std::endl;
+					}
+#endif // NDEBUG
+
+					if( daccounting.size() == 1 ) // nothing to intersect; happens quite infrequently, so we could perhaps eliminate this branch
+					{
+						subset_accounting[src.block_index()] = std::move(daccounting.front());
+						subset_blocks[src.block_index()] = std::move(dablocks.front());
+					}
+					else
+					{
+						typename block_accounting_t::value_type accounting;
+						block_container_t blocks;
+
+						auto start = timer_t::now();
+						for( auto da_db: apegrunt::zip_range(daccounting, dablocks) )
+						{
+							using boost::get;
+							auto& da = get<0>(da_db);
+							auto& db = get<1>(da_db);
+							if( accounting.empty() ) // acounting (and blocks) are always empty on the first iteration
+							{
+								//accounting = da;
+								//blocks = db;
+								accounting = std::move(da);
+								blocks = std::move(db);
+							}
+							else
+							{
+								typename block_accounting_t::value_type atemp;
+								block_container_t btemp;
+// /*
+								// evaluate all accounting.size() * da.size() intersections -- works great
+								for( const auto a1_b1: apegrunt::zip_range(accounting,blocks) )
+								{
+									const auto& a1(get<0>(a1_b1));
+									for( const auto a2_b2: apegrunt::zip_range(da,db) )
+									{
+										++npisect;
+										const auto& a2(get<0>(a2_b2));
+										if( has_overlap(a1,a2) )
+										{
+											auto a1_and_a2(a1 & a2); // auto isect( apegrunt::set_intersection(a1,a2) );
+											++nisect;
+											if( !a1_and_a2.empty() ) // if we have a non-zero intersection..
+											{
+												// ..store the intersection..
+												atemp.emplace_back( std::move(a1_and_a2) );
+
+												// ..and fuse the relevant block pieces
+												//std::cout << get<1>(a1_b1) << "|" << get<1>(a2_b2) << "=" << (get<1>(a1_b1) | get<1>(a2_b2)) << std::endl;
+												btemp.emplace_back( get<1>(a1_b1) | get<1>(a2_b2) );
+												++nnzisect;
+											}
+										}
+										else { ++nnoisect; }
+									}
+								}
+// */
+/*
+								// Evaluate set intersections and *differences*, using the difference sets as input
+								// for the next iteration. This reduces the number of required intersect ops, which should
+								// be faster than the above, but is not: need to investigate.
+								for( auto a1_b1: apegrunt::zip_range(accounting,blocks) )
+								{
+									auto& a1(get<0>(a1_b1));
+									for( auto a2_b2: apegrunt::zip_range(da,db) )
+									{
+										++npisect;
+										auto& a2(get<0>(a2_b2));
+										if( has_overlap(a1,a2) )
+										{
+											auto a1_a2_diff( set_intersection_and_differences( a1, a2 ) );
+											//auto a1_and_a2(a1 & a2); // auto isect( apegrunt::set_intersection(a1,a2) );
+											++nisect;
+											a1 = std::move(std::get<0>(a1_a2_diff));
+											a2 = std::move(std::get<1>(a1_a2_diff));
+											//std::swap(a1, std::get<0>(a1_a2_diff));
+											//std::swap(a2, std::get<1>(a1_a2_diff));
+											auto& a1_and_a2 = std::get<2>(a1_a2_diff);
+											if( !a1_and_a2.empty() ) // if we have a non-zero sized intersection..
+											{
+												// ..store the intersection..
+												atemp.emplace_back( std::move(a1_and_a2) );
+
+												// ..and fuse the relevant block pieces
+												btemp.emplace_back( get<1>(a1_b1) | get<1>(a2_b2) );
+												++nnzisect;
+											}
+										}
+										else { ++nnoisect; }
+									}
+								}
+*/
+								std::swap( accounting, atemp );
+								std::swap( blocks, btemp );
+							}
+						}
+						isect_time += timer_t::now() - start;
+
+						assert( accounting.size() == blocks.size() );
+						assert(!accounting.empty()); // should never be empty when we get this far
+						assert(!blocks.empty()); // should never be empty when we get this far
+
+						subset_accounting[src.block_index()] = std::move(accounting);
+						subset_blocks[src.block_index()] = std::move(blocks);
+					}
+
+#ifndef NDEBUG
+					{ // consistency check
+						apegrunt::lazy_set_union<block_accounting_container_t> lazy;
+						for(const auto& a: subset_accounting[src.block_index()] ) { lazy |= a; }
+
+						block_accounting_container_t test(lazy);
+
+						//std::cout << "block=" << src.block_index() << " #indices=" << test.size() << std::endl;
+						assert( test.size() == this->size() ); // every sample should be addressed exactly once
+					}
+#endif // NDEBUG
+
+					currpos += src.size();
+					if( out && !(currpos & output_frequency_mask) ) { print_statistics(currpos); }
+				}
+			};
+
+#if __cplusplus < 201703L
+#ifdef _OPENMP
+			omp_set_num_threads( apegrunt::Apegrunt_options::threads() );
+#pragma omp parallel for
+			for(auto& seq: blocksrc) { fuser(seq); }
+#else // no _OPENMP
+			std::for_each(cbegin(blocksrc), cend(blocksrc), fuser); // C++14 and earlier
+#endif // _OPENMP
+#else
+			std::for_each(std::execution::par, cbegin(blocksrc), cend(blocksrc), fuser); // C++17 and later
+#endif // __cplusplus
+
+			if( out )
+			{
+				print_statistics(currpos);
+				cputimer.stop();
+				cputimer.print_timing_stats();
+				const auto merge = double(std::chrono::duration_cast<std::chrono::milliseconds>(merge_time).count())/1000;
+				const auto actual_merge = double(std::chrono::duration_cast<std::chrono::milliseconds>(actual_merge_time).count())/1000;
+				const auto intersect = double(std::chrono::duration_cast<std::chrono::milliseconds>(isect_time).count())/1000;
+				*out << "apegrunt: symbolic merge: " << nmerge << " ops in " << merge << "s (" << merge/(double(nmerge)/1000000) << "us/op)\n";
+				*out << "apegrunt: merge: " << nmerge << " ops in " << actual_merge << "s (" << actual_merge/(double(nmerge)/1000000) << "us/op)\n";
+				*out << "apegrunt: intersect: " << nisect << " ops in " << intersect << "s (" << intersect/(double(nisect)/1000000) << "us/op) | misprediction ratio=" << double(nisect-nnzisect)/(double(nisect)) << "\n";
+				*out << "apegrunt: #merge=" << nmerge << " | #isect=" << nisect << " | #nzisect=" << nnzisect << " | #skippedisect=" << nnoisect << "\n";
+
+				//const auto nblocks = std::accumulate( std::begin(subset_accounting), std::end(subset_accounting), 0, [](const auto& sum, const auto& a) { return sum+a.size(); } );
+				//*out << "apegrunt: subset has " << nblocks << " blocks in " << subset_accounting.size() << " columns\n";
+				out->flush();
+			}
+		} // block structure subsetting
+
+		subset_alignment->finalize();
+
+		return subset_alignment;
+	}
 
     iterator erase( iterator first, iterator last )
     {

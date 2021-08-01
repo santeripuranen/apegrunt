@@ -1,6 +1,6 @@
 /** @file Alignment_impl_base.hpp
 
-	Copyright (c) 2016-2017 Santeri Puranen.
+	Copyright (c) 2016-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -31,6 +31,7 @@
 
 #include "Alignment.h"
 #include "StateVector.h"
+#include "StateVector_mutator.hpp"
 #include "StateVector_utility.hpp"
 #include "Apegrunt_utility.hpp"
 #include "Loci_parsers.hpp"
@@ -90,6 +91,31 @@ public:
 	const std::string& id_string() const { return m_id_string; }
 	void set_id_string( const std::string& id_string ) { m_id_string = id_string; }
 	void set_id_string( std::string&& id_string ) { m_id_string = std::move(id_string); }
+
+	Alignment_ptr<state_t> subset( Loci_ptr positions, std::ostream *out=nullptr ) const
+	{
+		using boost::get;
+
+		if( positions->size() == 0 ) { return Alignment_ptr<StateT>(); }
+
+		auto subset_alignment = std::make_shared<AlignmentT>();
+		subset_alignment->set_id_string( this->id_string() + ( positions->id_string().empty() ? "" : "."+positions->id_string() ) );
+		subset_alignment->set_loci_translation( apegrunt::combine(this->get_loci_translation(), positions) );
+		subset_alignment->set_n_original_positions( this->n_original_positions() );
+
+		for( const auto sequence: *this )
+		{
+			auto subset_sequence = StateVector_mutator<typename AlignmentT::statevector_t>( subset_alignment->get_new_sequence( sequence->id_string() ) );
+			subset_sequence.set_weight( sequence->weight() ); // transfer weights
+
+			for( const auto locus_index: positions )
+			{
+				subset_sequence( (*sequence)[locus_index] );
+			}
+		}
+
+		return subset_alignment;
+	}
 
 	typename w_frequency_t::value_type effective_size() const
 	{
@@ -174,6 +200,7 @@ private:
 
     value_type square_bracket_operator_impl( std::size_t index ) const override { return (*static_cast<const_cast_t>(this))[index]; }
 
+    Alignment_ptr<state_t> subset_impl( const Loci_ptr positions, std::ostream *out=nullptr ) const override { return static_cast<const_cast_t>(this)->subset(positions,out); }
     std::size_t size_impl() const override { return static_cast<const_cast_t>(this)->size(); }
     typename w_frequency_t::value_type effective_size_impl() const override { return static_cast<const_cast_t>(this)->effective_size(); }
 
