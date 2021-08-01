@@ -52,7 +52,7 @@ struct distribution_bincount_accumulator : accumulator_base
 		using std::cbegin; using std::cend;
 
 		const auto& d = distribution( args[accumulator] );
-		return std::accumulate( cbegin(d), cend(d), result_type(0), [=]( auto bincount ) { return ++bincount; } );
+		return std::accumulate( cbegin(d), cend(d), result_type(0), []( auto bincount, auto bin ) { return ++bincount; } );
 	}
 };
 

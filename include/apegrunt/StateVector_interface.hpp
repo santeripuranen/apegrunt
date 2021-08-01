@@ -24,7 +24,7 @@
 
 #include <string>
 #include <functional> // for std::hash
-//#include <memory> // for std::unique_ptr and std::make_unique
+#include <memory> // for std::unique_ptr and std::make_unique
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/nvp.hpp>
@@ -68,7 +68,7 @@ public:
 
 	//using const_iterator = apegrunt::iterator::StateVector_const_iterator;
 	//using iterator = apegrunt::iterator::StateVector_iterator;
-	using value_type = typename const_iterator::value_type;
+	using value_type = state_t; //typename const_iterator::value_type;
 	using block_type = State_block<value_type,apegrunt::StateBlock_size>;
 	//using frequencies_type = std::array< std::size_t, number_of_states<state_t>::value >;
 	using weight_type = double;
@@ -76,6 +76,7 @@ public:
 
 	using block_index_t = uint32_t; // uint16_t is sufficient only for at most 2^16 (=65536) blocks
 	using block_index_container_t = std::vector< block_index_t >;
+	using block_index_container_ptr = std::shared_ptr< block_index_container_t >;
 	//using block_index_container_t = IndexVector< block_index_t >;
 
 	StateVector() = default;
@@ -88,14 +89,17 @@ public:
     inline bool operator==( const my_type& rhs ) const { return this->equal_to_operator_impl( rhs ); }
 
     inline block_type get_block( std::size_t index ) const { return this->get_block_impl( index ); }
-    inline const block_index_container_t& get_block_indices() const { return this->get_block_indices_impl(); }
+    inline const block_index_container_ptr get_block_indices() const { return this->get_block_indices_impl(); }
 
     //inline const frequencies_type& frequencies() const { return this->frequencies_impl(); }
 
     inline std::size_t size() const { return this->size_impl(); }
-    inline const std::string& id_string() const { return this->id_string_impl(); }
-
     inline std::size_t bytesize() const { return this->bytesize_impl(); }
+
+    inline std::size_t id() const { return this->id_impl(); }
+    // no set_id(); id is an internal index defined by the parent Alignment at StateVector construction
+    inline const std::string& id_string() const { return this->id_string_impl(); }
+    inline void set_id_string( const std::string& id_string ) { this->set_id_string_impl(id_string); }
 
     inline std::size_t multiplicity() const { return this->multiplicity_impl(); }
 	inline void set_multiplicity( std::size_t multiplicity=1 ) { this->set_multiplicity_impl(multiplicity); }
@@ -125,14 +129,16 @@ private:
     virtual bool equal_to_operator_impl( const my_type& rhs ) const = 0;
 
     virtual block_type get_block_impl( std::size_t index ) const = 0;
-    virtual const block_index_container_t& get_block_indices_impl() const = 0;
+    virtual const block_index_container_ptr get_block_indices_impl() const = 0;
 
     //virtual const frequencies_type& frequencies_impl() const = 0;
 
     virtual std::size_t size_impl() const = 0;
-    virtual const std::string& id_string_impl() const = 0;
-
     virtual std::size_t bytesize_impl() const = 0;
+
+    virtual std::size_t id_impl() const = 0;
+    virtual const std::string& id_string_impl() const = 0;
+    virtual void set_id_string_impl( const std::string& id_string ) = 0;
 
     virtual std::size_t multiplicity_impl() const = 0;
 	virtual void set_multiplicity_impl( std::size_t multiplicity ) = 0;

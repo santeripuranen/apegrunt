@@ -28,6 +28,7 @@
 #include <mutex> // for std::mutex
 #include <limits>
 #include <atomic>
+#include <type_traits> // for std::enable_if
 
 #include "Graph_forward.h"
 #include "apegrunt/Apegrunt_utility.hpp"
@@ -37,21 +38,30 @@ namespace apegrunt {
 template< typename IntegerT >
 constexpr IntegerT create_flag_mask() { return IntegerT(1) << (std::numeric_limits<IntegerT>::digits-1); }
 
+template< bool Directed=false >
 class EdgeID : public apegrunt::extend_comparison_operators
 {
 public:
 	using node_id_t = uint32_t;
 	using id_t = uint64_t;
-	using my_type = EdgeID;
+	using my_type = EdgeID<Directed>;
 
 	enum { ID_FLAG_MASK = create_flag_mask<id_t>() };
 	enum { ID_UNFLAG_MASK = ~create_flag_mask<id_t>() };
 	enum { NODE_ID_UNFLAG_MASK = ~create_flag_mask<node_id_t>() };
 
 	EdgeID() = delete;
+	template< bool D=Directed, std::enable_if_t<!D,bool> = false >
 	inline EdgeID( node_id_t i, node_id_t j, bool set=false )
 	: m_i( std::min(i,j) & NODE_ID_UNFLAG_MASK ),
 	  m_j( std::max(i,j) & NODE_ID_UNFLAG_MASK )
+	{
+		if(set) { this->set(); }
+	}
+	template< bool D=Directed, std::enable_if_t<D,bool> = true >
+	inline EdgeID( node_id_t i, node_id_t j, bool set=false )
+	: m_i(i & NODE_ID_UNFLAG_MASK ),
+	  m_j(j & NODE_ID_UNFLAG_MASK )
 	{
 		if(set) { this->set(); }
 	}
@@ -62,6 +72,7 @@ public:
 	inline EdgeID( my_type&& other ) { m_id.store( other.m_id.load() ); }
 
 	inline my_type& operator=( const my_type& other ) { m_id.store(other.m_id.load()); return *this; }
+	inline my_type& operator=( my_type&& other ) { m_id.store(other.m_id.load()); return *this; }
 
 	inline node_id_t first() const { return m_i & NODE_ID_UNFLAG_MASK; }
 	inline node_id_t second() const { return m_j & NODE_ID_UNFLAG_MASK; }
@@ -90,35 +101,40 @@ private:
 	};
 };
 
-static std::ostream& operator<< ( std::ostream& os, const EdgeID& id )
+template< bool Directed >
+static std::ostream& operator<< ( std::ostream& os, const EdgeID<Directed>& id )
 {
 	os << id.first() << " " << id.second();
 	return os;
 }
 
 // an undirected edge class
+template< bool Directed=false >
 class Edge : public apegrunt::extend_comparison_operators
 {
 public:
-	using id_t = EdgeID;
+	using id_t = EdgeID<Directed>;
 	using node_id_t = typename id_t::node_id_t;
 	using real_t = double;
-	using my_type = Edge;
+	using my_type = Edge<Directed>;
 
 	Edge() = delete;
-	inline Edge( node_id_t i, node_id_t j, real_t w ) : m_id(i,j), m_w(w) { }
+	inline Edge( node_id_t i, node_id_t j, real_t w=0 ) : m_id(i,j), m_w(w) { }
 	~Edge() = default;
 
 	inline Edge( const my_type& other ) : m_id( other.m_id ), m_w( other.m_w ) { }
 	inline Edge( my_type&& other ) : m_id( std::move(other.m_id) ), m_w( std::move(other.m_w) ) { }
 
 	inline my_type& operator=( const my_type& rhs ) { m_id = rhs.m_id; m_w = rhs.m_w; return *this; }
+	inline my_type& operator=( my_type&& rhs ) { m_id = std::move(rhs.m_id); m_w = std::move(rhs.m_w); return *this; }
 
 	inline id_t id() const { return m_id; }
 	inline typename id_t::node_id_t node1() const { return m_id.first(); }
 	inline typename id_t::node_id_t node2() const { return m_id.second(); }
+	inline void set_weight( real_t w ) { m_w = w; }
 	inline real_t weight() const { return m_w; }
 	inline operator bool() const { return bool(m_id); }
+	inline bool is_set() const { return bool(*this); }
 	inline void set() { m_id.set(); }
 	inline void unset() { m_id.unset(); }
 
@@ -130,18 +146,21 @@ private:
 	real_t m_w;
 };
 
-static std::ostream& operator<< ( std::ostream& os, const Edge& edge )
+template< bool Directed >
+static std::ostream& operator<< ( std::ostream& os, const Edge<Directed>& edge )
 {
 	os << edge.id() << " " << edge.weight();
 	return os;
 }
 
+// An edge-list style graph data structure
+//template< bool Directed=false >
 class Graph
 {
 public:
-	using my_type = Graph;
+	using my_type = Graph; //<Directed>;
 
-	using edge_t = Edge;
+	using edge_t = Edge<>;
 	using node_id_t = typename edge_t::node_id_t;
 	using real_t = typename edge_t::real_t;
 
@@ -173,10 +192,14 @@ public:
 		m_edges.emplace_back( i, j, weight );
 	}
 
+	inline void insert( node_id_t i, node_id_t j, real_t weight )
+	{
+		m_edges.emplace_back( i, j, weight );
+	}
+
 	inline void join( my_type& other )
 	{
-		//auto&& scope_lock_this = this->acquire_lock();
-		//auto&& scope_lock_other = other.acquire_lock();
+		if( this == &other ) { return; }
 		this->lock(); other.lock();
 		//std::cout << "apegrunt: Graph.join() - this->size()=" << this->size() << " other.size()=" << other.size() << std::endl;
 		this->reserve( this->size()+other.size() );
@@ -185,7 +208,7 @@ public:
 		other.unlock(); this->unlock();
 	}
 
-	inline lock_t acquire_lock() { lock_t lock(m_modify); lock.lock(); return std::move( lock ); }
+	inline lock_t acquire_lock() { lock_t lock(m_modify); lock.lock(); return lock; }
 	inline void lock() { m_modify.lock(); }
 	inline void unlock() { m_modify.unlock(); }
 	inline void clear() { m_edges.clear(); }
@@ -211,7 +234,11 @@ public:
 	template< typename Compare=bool(const edge_t&, const edge_t&) >
 	inline void sort( Compare comp=[](const edge_t& a, const edge_t& b) { return (a.weight() == b.weight()) ? (a.id() < b.id()) : (a.weight() > b.weight()); } )
 	{
-		std::sort( this->begin(), this->end(), comp );
+#if __cplusplus < 201703L
+		std::sort( this->begin(), this->end(), comp );  // C++14 and earlier
+#else
+		std::sort( std::execution::par, this->begin(), this->end(), comp ); // C++17 and later
+#endif
 	}
 
 private:

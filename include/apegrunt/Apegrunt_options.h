@@ -1,6 +1,6 @@
-	/** @file Apegrunt_options.h
+/** @file Apegrunt_options.h
 
-	Copyright (c) 2016-2020 Santeri Puranen.
+	Copyright (c) 2016-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -90,12 +90,16 @@ public:
 	static bool has_sample_weights_filename();
 	static const std::string& get_sample_weights_filename();
 
+	static bool has_sample_groups_filename();
+	static const std::string& get_sample_groups_filename();
+
 	static std::size_t get_input_indexing_base();
 	static void set_input_indexing_base( std::size_t base_index );
 
 	// Output control
 	static bool output_state_frequencies();
 	static bool output_sample_weights();
+	static bool output_sample_groups();
 	static bool output_sample_distance_matrix();
 	static bool output_alignment();
 	static bool output_filtered_alignment();
@@ -118,8 +122,8 @@ public:
 	static std::size_t get_output_indexing_base();
 	static void set_output_indexing_base( std::size_t base_index );
 
-	static bool cuda();
-	static void set_cuda( bool use_cuda=true );
+	//static bool cuda();
+	//static void set_cuda( bool use_cuda=true );
 
 	static int threads();
 	static void set_threads( int nthreads );
@@ -143,6 +147,7 @@ private:
 	static std::string s_mappinglist_file_name;
 	static std::string s_samplelist_file_name;
 	static std::string s_sample_weights_file_name;
+	static std::string s_sample_groups_file_name;
 
 	//	static bool s_fuse_duplicates;
 	static double s_minor_allele_frequency_threshold;
@@ -154,6 +159,7 @@ private:
 	static int s_sample_alignment;
 	static double s_sample_reweighting_threshold;
 	static bool s_output_sample_weights;
+	static bool s_output_sample_groups;
 	static bool s_no_sample_reweighting;
 	static bool s_rescale_sample_weights;
 	static bool s_output_sample_distance_matrix;
@@ -177,8 +183,8 @@ private:
 	static int s_end_locus;
 
 	static int s_threads;
-	static int s_nodes;
-	static bool s_use_cuda;
+//	static int s_nodes;
+//	static bool s_use_cuda;
 	static bool s_verbose;
 
 	static const std::string s_title_string;
@@ -190,13 +196,10 @@ private:
 	void m_init();
 
 	static void s_init_verbose( bool verbose );
-#ifndef APEGRUNT_NO_TBB // Threading with Threading Building Blocks
 	static void s_init_threads( int nthreads );
-#endif // APEGRUNT_NO_TBB
-
-#ifndef APEGRUNT_NO_CUDA
-	static void s_init_use_cuda( bool use_cuda );
-#endif // APEGRUNT_NO_CUDA
+//#ifndef APEGRUNT_NO_CUDA
+//	static void s_init_use_cuda( bool use_cuda );
+//#endif // APEGRUNT_NO_CUDA
 	static void s_init_fuse_duplicates( bool flag );
 	static void s_init_minor_allele_frequency_threshold( double threshold );
 	static void s_init_gap_frequency_threshold( double threshold );
@@ -208,6 +211,7 @@ private:
 	static void s_init_rescale_sample_weights( bool flag );
 	static void s_init_sample_reweighting_threshold( double threshold );
 	static void s_init_output_sample_weights( bool flag );
+	static void s_init_output_sample_groups( bool flag );
 	static void s_init_output_sample_distance_matrix( bool flag );
 	static void s_init_output_alignment( const bool& flag );
 	static void s_init_output_filtered_alignment( const bool& flag );

@@ -20,6 +20,7 @@
 */
 
 #include "apegrunt/aligned_allocator.hpp"
+#include <cstdlib>
 
 namespace apegrunt {
 

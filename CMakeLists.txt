@@ -11,6 +11,7 @@ set( CMAKE_CXX_COMPILER $ENV{CMAKE_CXX_COMPILER} )
 set( CMAKE_C_COMPILER $ENV{CMAKE_C_COMPILER} )
 
 project( APEGRUNT )
+set( CMAKE_CXX_STANDARD 17 )
 set( ${PROJECT_NAME}_INCLUDE_DIR ${${PROJECT_NAME}_SOURCE_DIR}/include CACHE INTERNAL "Apegrunt include dir" )
 
 include( cmake/Apegrunt_options.cmake NO_POLICY_SCOPE )

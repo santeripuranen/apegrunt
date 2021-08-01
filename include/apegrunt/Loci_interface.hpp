@@ -45,6 +45,9 @@ public:
 	Loci() { }
     virtual ~Loci() { } // enable derived classes to be destructed through Loci_ptr
 
+    const_iterator begin() const { return this->cbegin_impl(); }
+    const_iterator end() const { return this->cend_impl(); }
+
     const_iterator cbegin() const { return this->cbegin_impl(); }
     const_iterator cend() const { return this->cend_impl(); }
 
@@ -70,29 +73,25 @@ private:
     virtual void set_id_string_impl( const std::string& id_string ) = 0;
 };
 
-typename Loci::const_iterator begin( const Loci& loci ) { return loci.cbegin(); }
-typename Loci::const_iterator end( const Loci& loci ) { return loci.cend(); }
+template< bool Dummy=true >
+typename Loci::const_iterator begin( const Loci& loci, bool im_a=Dummy ) { return loci.cbegin(); }
+template< bool Dummy=true >
+typename Loci::const_iterator end( const Loci& loci, bool im_a=Dummy ) { return loci.cend(); }
 
-typename Loci::const_iterator begin( const Loci_ptr& loci ) { return loci->cbegin(); }
-typename Loci::const_iterator end( const Loci_ptr& loci ) { return loci->cend(); }
+template< bool Dummy=true >
+typename Loci::const_iterator begin( const Loci_ptr& loci, bool im_a=Dummy ) { return loci->cbegin(); }
+template< bool Dummy=true >
+typename Loci::const_iterator end( const Loci_ptr& loci, bool im_a=Dummy ) { return loci->cend(); }
 
-typename Loci::const_iterator cbegin( const Loci& loci ) { return loci.cbegin(); }
-typename Loci::const_iterator cend( const Loci& loci ) { return loci.cend(); }
+template< bool Dummy=true >
+typename Loci::const_iterator cbegin( const Loci& loci, bool im_a=Dummy ) { return loci.cbegin(); }
+template< bool Dummy=true >
+typename Loci::const_iterator cend( const Loci& loci, bool im_a=Dummy ) { return loci.cend(); }
 
-typename Loci::const_iterator cbegin( const Loci_ptr& loci ) { return loci->cbegin(); }
-typename Loci::const_iterator cend( const Loci_ptr& loci ) { return loci->cend(); }
-
-std::ostream& operator<< ( std::ostream& os, const Loci* locilist )
-{
-	for( auto i: *locilist ) { os << " " << i; }
-	return os;
-}
-
-std::ostream& operator<< ( std::ostream& os, const Loci_ptr& locilist )
-{
-	os << locilist.get();
-	return os;
-}
+template< bool Dummy=true >
+typename Loci::const_iterator cbegin( const Loci_ptr& loci, bool im_a=Dummy ) { return loci->cbegin(); }
+template< bool Dummy=true >
+typename Loci::const_iterator cend( const Loci_ptr& loci, bool im_a=Dummy ) { return loci->cend(); }
 
 } // namespace apegrunt
 

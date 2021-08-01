@@ -57,12 +57,14 @@ struct StateVector_parser_FASTA_grammar
 	explicit StateVector_parser_FASTA_grammar( )
 		: StateVector_parser_FASTA_grammar::base_type(sequence, "StateVector_parser_FASTA_grammar")
 	{
-		state_string %= *( qi::char_ - qi::char_(s_fasta_tag) ) // buffer input into a std::string
-		//state_string = *( ( qi::char_ - qi::char_(s_fasta_tag) )[ phx::bind( &statevector_t::push_back, qi::_r1, qi::_1 ) ] )// buffer input into a std::string
+		//state_string %= *( qi::char_ - s_fasta_tag ) // read the whole sequence in one go
+		//state_string %= qi::repeat(1, 4096)[ qi::char_ - s_fasta_tag ] // read 4k chunks
+		state_string %= qi::repeat(1, 16384)[ qi::char_ - s_fasta_tag ] // read 16k chunks
+		//state_string %= qi::repeat(1, 32768)[ qi::char_ - s_fasta_tag ] // read 32k chunks
+
 		;
 		// Main node
-		sequence = state_string[ phx::bind( &statevector_t::assign, qi::_r1, std::move(qi::_1) ) ] // transfer cached string to the state container
-		//sequence = state_string(qi::_r1)[ phx::bind( &statevector_t::flush_cache, qi::_r1 ) ] // flush the StateVector input cache
+		sequence = *state_string[ phx::bind( &statevector_t::append, qi::_r1, qi::_1 ) ] // transfer cached string to the state container
 		;
 	}
 
@@ -74,13 +76,6 @@ struct StateVector_parser_FASTA_grammar
 
 template< typename IteratorT, typename StateVectorT >
 const char StateVector_parser_FASTA_grammar<IteratorT, StateVectorT>::s_fasta_tag = '>';
-/*
-template< typename IteratorT, typename StateVectorT >
-qi::rule<IteratorT, void(StateVectorT* const), ascii::space_type> StateVector_parser_FASTA_grammar<IteratorT, StateVectorT>::state_string = *( qi::char_ - qi::char_(StateVector_parser_FASTA_grammar<IteratorT, StateVectorT>::s_fasta_tag) )[ phx::bind( &StateVectorT::push_back, qi::_r1, qi::_1 ) ];
-
-template< typename IteratorT, typename StateVectorT >
-qi::rule<IteratorT, void(StateVectorT* const), ascii::space_type> StateVector_parser_FASTA_grammar<IteratorT, StateVectorT>::sequence = StateVector_parser_FASTA_grammar<IteratorT, StateVectorT>::state_string(qi::_r1)[ phx::bind( &StateVectorT::flush_cache, qi::_r1 ) ];
-*/
 } // namespace parsers
 
 } // namespace apegrunt

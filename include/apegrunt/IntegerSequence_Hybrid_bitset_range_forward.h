@@ -1,6 +1,6 @@
 /** @file IntegerSequence_Hybrid_bitset_range_forward.h
 
-	Copyright (c) 2018-2020 Santeri Puranen.
+	Copyright (c) 2018-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -33,7 +33,10 @@ template< typename IndexT, bool Aligned=true >
 struct Hybrid_bitset_range_element;
 
 template< typename IndexT, bool Aligned=true >
-using Hybrid_bitset_sequence = IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> >;
+using Apegrunt_bitset = IntegerSequence< Hybrid_bitset_range_element<IndexT,Aligned> >;
+
+template< typename IndexT, bool Aligned > struct hash< Hybrid_bitset_range_element<IndexT,Aligned> >;
+template< typename IndexT, bool Aligned > struct equal_to< Hybrid_bitset_range_element<IndexT,Aligned> >;
 
 } // namespace apegrunt
 

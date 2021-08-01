@@ -1,6 +1,6 @@
 /** @file IntegerSequence_interface.hpp
  
-	Copyright (c) 2016-2020 Santeri Puranen.
+	Copyright (c) 2016-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -27,6 +27,7 @@
 #include <ostream>
 #include <limits>
 #include <algorithm> // for std::set_intersection
+#include <functional> // for std::reference_wrapper
 
 #include "IntegerSequence_forward.h"
 #include "IntegerSequence_interface.hpp"
@@ -47,6 +48,22 @@ typename IntegerSequence<RangeT>::iterator end( const IntegerSequence<RangeT>& c
 
 template< typename T >
 std::size_t bytesize( const IntegerSequence<T>& v ) { return v.bytesize(); }
+
+template< typename T >
+//std::size_t bytesize( const std::vector<T>& v ) { return v.size()*sizeof(T); }
+std::size_t bytesize( const std::vector<T>& v ) { return sizeof(std::vector<T>)+sizeof(T)*v.size(); }
+
+template< typename RangeT >
+bool has_overlap( const IntegerSequence< RangeT >& a, const IntegerSequence< RangeT >& b ) { return a.has_overlap(b); }
+
+template< typename T >
+bool has_overlap( const std::vector<T>& a, const std::vector<T>& b ) { return true; } // this is a dummy implementation
+
+template< typename RangeT, typename T >
+bool contains( const IntegerSequence<RangeT>& v, T query ) { return v.contains(query); }
+
+template< typename T >
+bool contains( const std::vector<T>& v, T query ) { return std::binary_search(v.begin(),v.end(),query); }
 
 template< typename T >
 inline IntegerSequence< T >& operator<< ( IntegerSequence< T >& container, typename T::value_type value )
@@ -72,8 +89,36 @@ std::vector<typename T::value_type> get_dense( const IntegerSequence< T >& conta
 	return dense;
 }
 
-template< typename IterableT >
-std::ostream& encode_range_unaligned(std::ostream& os, const IterableT& container )
+template< typename IndexT >
+std::ostream& operator<< ( std::ostream& os, const std::vector< IndexT >& container )
+{
+	using std::cbegin; using std::cend;
+
+	auto currpos = cbegin( container );
+	auto begpos = currpos;
+	auto oldpos = currpos;
+	const auto endpos = cend( container );
+
+	os << std::hex << *currpos;
+	while( currpos != endpos )
+	{
+		++currpos;
+		if( *currpos > (*oldpos)+1 )
+		{
+			if( oldpos != begpos )
+			{
+				os << "-" << *oldpos;
+			}
+			os << "," << *currpos;
+			begpos = currpos;
+		}
+		oldpos = currpos;
+	}
+	return os;
+}
+
+template< typename RangeT >
+std::ostream& operator<< ( std::ostream& os, const IntegerSequence< RangeT >& container )
 {
 	using std::cbegin; using std::cend;
 	using apegrunt::cbegin; using apegrunt::cend;
@@ -101,35 +146,46 @@ std::ostream& encode_range_unaligned(std::ostream& os, const IterableT& containe
 	return os;
 }
 
-template< typename IndexT >
-std::ostream& operator<< ( std::ostream& os, const std::vector< IndexT >& container )
-{
-	return encode_range_unaligned( os, container );
-}
-
 template< typename RangeT >
-std::ostream& operator<< ( std::ostream& os, const IntegerSequence< RangeT >& container )
+struct unaligned_encoding
 {
-	return encode_range_unaligned( os, container );
-}
-
-template< typename RangeT >
-struct unaligned_encoding_wrap
-{
-	unaligned_encoding_wrap() = delete;
-	unaligned_encoding_wrap( const IntegerSequence< RangeT >& container ) : m_container(container) { }
-	~unaligned_encoding_wrap() = default;
+	unaligned_encoding() = delete;
+	unaligned_encoding( const IntegerSequence< RangeT >& container ) : m_container(container) { }
+	~unaligned_encoding() = default;
 
 	const IntegerSequence< RangeT >& m_container;
 };
 
 template< typename RangeT >
-unaligned_encoding_wrap<RangeT> unaenc( const IntegerSequence< RangeT >& container ) { return unaligned_encoding_wrap<RangeT>(container); }
+unaligned_encoding<RangeT> unaenc( const IntegerSequence< RangeT >& container ) { return unaligned_encoding<RangeT>(container); }
 
 template< typename RangeT >
-std::ostream& operator<< ( std::ostream& os, const unaligned_encoding_wrap<RangeT>& wrapper )
+std::ostream& operator<< ( std::ostream& os, const unaligned_encoding<RangeT>& wrapper )
 {
-	return encode_range_unaligned( os, wrapper.m_container );
+	using std::cbegin; using std::cend;
+	using apegrunt::cbegin; using apegrunt::cend;
+
+	auto currpos = cbegin( wrapper.m_container );
+	auto begpos = currpos;
+	auto oldpos = currpos;
+	const auto endpos = cend( wrapper.m_container );
+
+	os << std::hex << *currpos;
+	while( currpos != endpos )
+	{
+		++currpos;
+		if( *currpos > (*oldpos)+1 )
+		{
+			if( oldpos != begpos )
+			{
+				os << "-" << *oldpos; // os.flush();
+			}
+			os << "," << *currpos; // os.flush();
+			begpos = currpos;
+		}
+		oldpos = currpos;
+	}
+	return os;
 }
 
 // gather
@@ -141,21 +197,34 @@ RealT gather( const std::vector<IndexT>& a, const RealT *weights )
 	return std::accumulate( cbegin(a), cend(a), RealT(0), [&weights]( RealT sum, auto offset ) { return sum + *(weights+offset); } );
 }
 
+// gather
+template< typename RealT >
+struct gatherer
+{
+	using real_t = RealT;
+
+	gatherer( const real_t *weights ) : w(weights), sum(0) { }
+
+	template< typename ElementT >
+	void operator()( const ElementT& element ) { sum += ElementT::gather(w,element); }
+
+	const real_t *w;
+	real_t sum;
+};
+
 // intersection
 template< typename IndexT >
 std::vector<IndexT> set_intersection( const std::vector<IndexT>& a, const std::vector<IndexT>& b )
 {
 	using index_t = IndexT;
 	std::vector<index_t> isect;
-	isect.reserve( std::min(a.size(), b.size()) ); // can't need more than this, but could be less
+	isect.reserve( std::min(a.size(), b.size()) ); // can't need more than this, but might be less
 
-	const auto isect_end = std::set_intersection(
+	/* const auto isect_end = */ std::set_intersection(
 			cbegin(a), cend(a),
 			cbegin(b), cend(b),
 			std::back_inserter(isect)
 	);
-
-	isect.shrink_to_fit();
 
 	return isect;
 }
@@ -177,20 +246,79 @@ std::vector<IndexT> set_union( const std::vector<IndexT>& a, const std::vector<I
 			std::back_inserter(theunion)
 	);
 
-	theunion.shrink_to_fit();
-
 	return theunion;
 }
 
 template< typename IndexT >
 std::vector<IndexT> operator|( const std::vector<IndexT>& a, const std::vector<IndexT>& b ) { return set_union(a,b); }
 
-template< typename IntegerT >
-constexpr IntegerT create_range_flag_mask() { return IntegerT(1) << std::numeric_limits<IntegerT>::digits-1; } // set the most significant bit
+template< typename IndexT >
+std::vector<IndexT> set_union(
+		const std::vector< std::reference_wrapper< const std::vector<IndexT> > >& sets
+	)
+{
+	using container_t = std::vector<IndexT>;
+	using std::cbegin; using std::cend;
+	using std::begin; using std::end;
 
+	std::size_t reserve = std::accumulate( cbegin(sets), cend(sets), 0, []( auto value, const auto& set ){ return value+set.get().size(); } );
+	container_t the_union; the_union.reserve(reserve);
+	for( const auto& set: sets )
+	{
+		the_union.insert( the_union.end(), cbegin(set.get()), cend(set.get()) );
+	}
+	std::sort( the_union.begin(), the_union.end() );
+	auto last = std::unique( the_union.begin(), the_union.end());
+	the_union.erase(last, the_union.end());
+
+	return the_union;
+}
+
+template< typename SetT >
+struct lazy_set_union
+{
+	using my_type = lazy_set_union<SetT>;
+	using wrap_t = std::reference_wrapper< const SetT >;
+	lazy_set_union() : m_sets() { }
+	~lazy_set_union() = default;
+
+	inline my_type& add( const SetT& set ) { m_sets.emplace_back( wrap_t(set) ); return *this; }
+	inline my_type& operator|=( const SetT& set ) { return this->add(set); }
+	inline operator SetT() const { return apegrunt::set_union(m_sets); }
+
+	std::vector< std::reference_wrapper< const SetT > > m_sets;
+};
+
+// intersect and differences for std::vector; used only for testing purposes (so that code will compile)
+template< typename IndexT, typename UnaryFunction >
+UnaryFunction inplace_set_differences_and_for_each_in_intersection(
+		std::vector<IndexT>& a,
+		std::vector<IndexT>& b,
+		UnaryFunction f
+	)
+{
+	using std::cbegin; using std::cend;
+	/* const auto isect_end = */ std::set_intersection( cbegin(a), cend(a),	cbegin(b), cend(b),	f );
+
+	std::vector<IndexT> aout;
+	std::vector<IndexT> bout;
+
+	/* const auto adiff_end = */ std::set_difference( cbegin(a), cend(a), cbegin(b), cend(b), std::back_inserter(aout) );
+	std::swap(a,aout);
+
+	/* const auto bdiff_end = */ std::set_difference( cbegin(b), cend(b), cbegin(a), cend(a), std::back_inserter(bout) );
+	std::swap(b,bout);
+
+	return f;
+}
 // complement
 
+// symmetric difference
+
+// relative complements
+
 // split into intersection and complement
+
 
 } // namespace apegrunt
 

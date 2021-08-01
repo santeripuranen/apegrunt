@@ -1,6 +1,6 @@
 /** @file IntegerSequence_Hybrid_bitset_range.h
 
-	Copyright (c) 2018-2020 Santeri Puranen.
+	Copyright (c) 2018-2021 Santeri Puranen. All rights reserved.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as

@@ -75,7 +75,7 @@ private:
     bool lt_operator_impl( const interface_t& rhs ) const override { assert( static_cast<const_ref_t>(*this).type() == rhs.type() ); return static_cast<const_ref_t>(*this) < static_cast<const_ref_t>(rhs); }
 
     const std::type_info& type_impl() const override { return static_cast<const_ref_t>(*this).type(); }
-    std::shared_ptr<base_t> clone_impl() const override { return static_cast<const_ref_t>(*this).clone(); }
+    std::unique_ptr<base_t> clone_impl() const override { return static_cast<const_ref_t>(*this).clone(); }
 };
 
 } // namespace iterator

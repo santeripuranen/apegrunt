@@ -1,6 +1,6 @@
 /** @file Apegrunt_options.cpp
 
-	Copyright (c) 2016-2020 Santeri Puranen.
+	Copyright (c) 2016-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -18,6 +18,7 @@
 	@author Santeri Puranen
 	$Id: $
 */
+#include <thread>
 
 #include "apegrunt/Apegrunt_options.h"
 #include "apegrunt/Apegrunt_version.h"
@@ -38,23 +39,13 @@ int Apegrunt_options_base::s_end_locus=-1;
 //std::string Apegrunt_options_base::s_outfile_name = "apegrunt.log";
 //std::string Apegrunt_options_base::s_errfile_name = "apegrunt.err";
 
-#ifndef APEGRUNT_NO_TBB // Threading with Threading Building Blocks
 int Apegrunt_options_base::s_threads = -1;
-#else
-int Apegrunt_options_base::s_threads = 1;
-#endif // APEGRUNT_NO_TBB
 
-#ifndef APEGRUNT_NO_MPI
-int Apegrunt_options_base::s_nodes = -1;
-#else
-int Apegrunt_options_base::s_nodes = 1;
-#endif // APEGRUNT_NO_MPI
-
-#ifndef APEGRUNT_NO_CUDA
-bool Apegrunt_options_base::s_use_cuda = true;
-#else
-bool Apegrunt_options_base::s_use_cuda = false;
-#endif
+//#ifndef APEGRUNT_NO_CUDA
+//bool Apegrunt_options_base::s_use_cuda = true;
+//#else
+//bool Apegrunt_options_base::s_use_cuda = false;
+//#endif
 
 #ifdef APEGRUNT_STANDALONE_BUILD
 // Apegrunt standalone binary options
@@ -83,21 +74,27 @@ const std::string Apegrunt_options_base::s_version_string(
 	"AVX"
 #elif __SSE3__
 	"SSE3"
+#ifdef __POPCNT__
+	+"+POPCNT"
+#endif // __POPCNT__
 #elif __SSE2__
 	"SSE2"
+#ifdef __POPCNT__
+	+"+POPCNT"
+#endif // __POPCNT__
 #else
 	"generic"
 #endif
-	+ " build " + std::string(__DATE__) + " " + std::string(__TIME__)
+	+ " build w/runtime dispatch " + std::string(__DATE__) + " " + std::string(__TIME__)
 );
 
 const std::string Apegrunt_options_base::s_copyright_notice(
-	std::string("Copyright (c) 2016-2020 Santeri Puranen\nLicensed under the GNU Affero General Public License version 3.\n\n")
+	std::string("Copyright (c) 2016-2021 Santeri Puranen\nLicensed under the GNU Affero General Public License version 3.\n\n")
 	+ "THIS SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND."
 );
 
 const std::string Apegrunt_options_base::s_long_copyright_notice(
-	std::string("Copyright (c) 2016-2020 Santeri Puranen\nLicensed under the GNU Affero General Public License version 3.\n\n")
+	std::string("Copyright (c) 2016-2021 Santeri Puranen\nLicensed under the GNU Affero General Public License version 3.\n\n")
 	+ "This program is free software: you can redistribute it and/or modify\n"
 	+ "it under the terms of the GNU Affero General Public License version 3 as\n"
 	+ "published by the Free Software Foundation.\n\n"
@@ -117,6 +114,7 @@ std::string Apegrunt_options_base::s_excludelist_file_name;
 std::string Apegrunt_options_base::s_mappinglist_file_name;
 std::string Apegrunt_options_base::s_samplelist_file_name;
 std::string Apegrunt_options_base::s_sample_weights_file_name;
+std::string Apegrunt_options_base::s_sample_groups_file_name;
 // */
 double Apegrunt_options_base::s_minor_allele_frequency_threshold = 0.01; // default=0.01, i.e. the alleles below 1% are ignored
 double Apegrunt_options_base::s_gap_frequency_threshold = 0.15; // default=0.15, i.e. positions with more that 15% gaps are ignored
@@ -128,6 +126,7 @@ bool Apegrunt_options_base::s_output_state_frequencies = false;
 
 double Apegrunt_options_base::s_sample_reweighting_threshold = 0.9; // default=1.0, i.e. all elements should be identical for two sequences to be considered as one
 bool Apegrunt_options_base::s_output_sample_weights = false;
+bool Apegrunt_options_base::s_output_sample_groups = false;
 bool Apegrunt_options_base::s_no_sample_reweighting = false;
 bool Apegrunt_options_base::s_rescale_sample_weights = false;
 bool Apegrunt_options_base::s_output_sample_distance_matrix = false;
@@ -207,6 +206,7 @@ double Apegrunt_options_base::sample_reweighting_threshold() { return s_sample_r
 bool Apegrunt_options_base::reweight_samples() { return !s_no_sample_reweighting; }
 bool Apegrunt_options_base::rescale_sample_weights() { return s_rescale_sample_weights; }
 bool Apegrunt_options_base::output_sample_weights() { return s_output_sample_weights; }
+bool Apegrunt_options_base::output_sample_groups() { return s_output_sample_groups; }
 bool Apegrunt_options_base::output_sample_distance_matrix() { return s_output_sample_distance_matrix; }
 bool Apegrunt_options_base::output_alignment() { return s_output_alignment; }
 bool Apegrunt_options_base::output_filtered_alignment() { return s_output_filtered_alignment; }
@@ -225,24 +225,23 @@ void Apegrunt_options_base::set_input_indexing_base( std::size_t base_index ) { 
 int Apegrunt_options_base::get_begin_locus() { return s_begin_locus-s_input_indexing_base; }
 int Apegrunt_options_base::get_end_locus() { return s_end_locus-s_input_indexing_base; }
 
-bool Apegrunt_options_base::cuda() { return s_use_cuda; }
-#ifndef APEGRUNT_NO_CUDA
-void Apegrunt_options_base::set_cuda( bool use_cuda ) { s_use_cuda = use_cuda; }
-#else
-void Apegrunt_options_base::set_cuda( bool use_cuda ) { } // do nothing
-#endif // APEGRUNT_NO_CUDA
+//bool Apegrunt_options_base::cuda() { return s_use_cuda; }
+//#ifndef APEGRUNT_NO_CUDA
+//void Apegrunt_options_base::set_cuda( bool use_cuda ) { s_use_cuda = use_cuda; }
+//#else
+//void Apegrunt_options_base::set_cuda( bool use_cuda ) { } // do nothing
+//#endif // APEGRUNT_NO_CUDA
 
 int Apegrunt_options_base::threads() { return s_threads; }
-#ifndef APEGRUNT_NO_TBB // Threading with Threading Building Blocks
 void Apegrunt_options_base::set_threads( int nthreads ) { s_threads = nthreads; }
-#else
-void Apegrunt_options_base::set_threads( int nthreads ) { } // do nothing
-#endif // APEGRUNT_NO_TBB
 
 void Apegrunt_options_base::m_init()
 {
 	namespace po = boost::program_options;
 #ifdef APEGRUNT_STANDALONE_BUILD
+	// hardware_concurrency() may return 0; use 1 if we fail to detect any
+	Apegrunt_options_base::s_threads = std::max(uint(1),std::thread::hardware_concurrency());
+
 	m_standalone_options.add_options()
 		("help,h", "Print this help message.")
 		("version", "Print version information.")
@@ -251,12 +250,10 @@ void Apegrunt_options_base::m_init()
 		("outfile", po::value< std::string >( &Apegrunt_options_base::s_outfile_name )->default_value(Apegrunt_options_base::s_outfile_name), "Log filename.")
 		("errfile", po::value< std::string >( &Apegrunt_options_base::s_errfile_name )->default_value(Apegrunt_options_base::s_errfile_name), "Error log filename.")
 */
-#ifndef APEGRUNT_NO_TBB // Threading with Threading Building Blocks
 		("threads,t", po::value< int >( &Apegrunt_options_base::s_threads )->default_value(Apegrunt_options_base::s_threads)->notifier(Apegrunt_options_base::s_init_threads), "Number of threads per shared memory node (-1=use all hardware threads that the OS/environment exposes).")
-#endif // APEGRUNT_NO_TBB
-#ifndef APEGRUNT_NO_CUDA
-		("cuda", po::bool_switch( &Apegrunt_options_base::s_use_cuda )->default_value(Apegrunt_options_base::s_use_cuda)->notifier(Apegrunt_options_base::s_init_use_cuda), "Use CUDA devices, if available.")
-#endif // APEGRUNT_NO_CUDA
+//#ifndef APEGRUNT_NO_CUDA
+//		("cuda", po::bool_switch( &Apegrunt_options_base::s_use_cuda )->default_value(Apegrunt_options_base::s_use_cuda)->notifier(Apegrunt_options_base::s_init_use_cuda), "Use CUDA devices, if available.")
+//#endif // APEGRUNT_NO_CUDA
 	;
 #endif // APEGRUNT_STANDALONE_BUILD
 
@@ -268,6 +265,7 @@ void Apegrunt_options_base::m_init()
 		("mapping-list", po::value< std::string >( &Apegrunt_options_base::s_mappinglist_file_name ), "Name of file containing loci mappings.")
 		("sample-list", po::value< std::string >( &Apegrunt_options_base::s_samplelist_file_name ), "The sample filter list input filename.")
 		("sample-weights",  po::value< std::string >( &Apegrunt_options_base::s_sample_weights_file_name ), "Name of file containing sample weights.")
+		("sample-groups",  po::value< std::string >( &Apegrunt_options_base::s_sample_groups_file_name ), "Name of file containing sample groups.")
 		("input-indexing-base", po::value< std::size_t >( &Apegrunt_options_base::s_input_indexing_base )->default_value(Apegrunt_options_base::s_input_indexing_base)->notifier(Apegrunt_options_base::s_init_input_indexing_base), "Base index for input." )
 
 		// Alignment processing control
@@ -285,6 +283,7 @@ void Apegrunt_options_base::m_init()
 		// Output options
 		("output-state-frequencies", po::bool_switch( &Apegrunt_options_base::s_output_state_frequencies )->default_value(Apegrunt_options_base::s_output_state_frequencies)->notifier(Apegrunt_options_base::s_init_output_state_frequencies), "Write column-wise state frequencies to file.")
 		("output-sample-weights", po::bool_switch( &Apegrunt_options_base::s_output_sample_weights )->default_value(Apegrunt_options_base::s_output_sample_weights)->notifier(Apegrunt_options_base::s_init_output_sample_weights), "Output sample weights.")
+		("output-sample-groups", po::bool_switch( &Apegrunt_options_base::s_output_sample_groups )->default_value(Apegrunt_options_base::s_output_sample_groups)->notifier(Apegrunt_options_base::s_init_output_sample_groups), "Output sample groups.")
 		("output-sample-distance-matrix", po::bool_switch( &Apegrunt_options_base::s_output_sample_distance_matrix )->default_value(Apegrunt_options_base::s_output_sample_distance_matrix)->notifier(Apegrunt_options_base::s_init_output_sample_distance_matrix), "Output triangular sample-sample Hamming distance matrix.")
 		("output-indexing-base", po::value< std::size_t >( &Apegrunt_options_base::s_output_indexing_base )->default_value(Apegrunt_options_base::s_output_indexing_base)->notifier(Apegrunt_options_base::s_init_output_indexing_base), "Base index for output." )
 		("output-alignment", po::bool_switch( &Apegrunt_options::s_output_alignment )->default_value(Apegrunt_options::s_output_alignment)->notifier(Apegrunt_options::s_init_output_alignment), "Write alignment to file.")
@@ -435,6 +434,14 @@ void Apegrunt_options_base::s_init_output_sample_weights( bool flag )
 	}
 }
 
+void Apegrunt_options_base::s_init_output_sample_groups( bool flag )
+{
+	if( flag && s_verbose && s_out )
+	{
+		*s_out << "apegrunt: output sample groups to file.\n";
+	}
+}
+
 void Apegrunt_options_base::s_init_output_sample_distance_matrix( bool flag )
 {
 	if( flag && s_verbose && s_out )
@@ -507,25 +514,32 @@ void Apegrunt_options_base::s_init_distance_penalty_scaling( double val )
 	}
 }
 
-#ifndef APEGRUNT_NO_TBB // Threading with Threading Building Blocks
 void Apegrunt_options_base::s_init_threads( int nthreads )
 {
+	if( nthreads < 1 )
+	{
+		Apegrunt_options_base::s_threads = std::max(uint(1),std::thread::hardware_concurrency()); // hardware_concurrency() may return 0
+	}
+	else
+	{
+	 	// we won't allow more threads than we can detect; use 1 if we fail to detect any
+		Apegrunt_options_base::s_threads = std::min(uint(nthreads),std::max(uint(1),std::thread::hardware_concurrency())); // hardware_concurrency() may return 0
+	}
 	if( s_verbose && s_out )
 	{
-		*s_out << "apegrunt: user requests " << nthreads << " compute threads.\n";
+		*s_out << "apegrunt: using " << nthreads << " compute threads.\n";
 	}
 }
-#endif // APEGRUNT_NO_TBB
 
-#ifndef APEGRUNT_NO_CUDA
-void Apegrunt_options_base::s_init_use_cuda( bool use_cuda )
-{
-	if( s_verbose && s_out && s_use_cuda )
-	{
-		*s_out << "apegrunt: use CUDA if available.\n";
-	}
-}
-#endif // APEGRUNT_NO_CUDA
+//#ifndef APEGRUNT_NO_CUDA
+//void Apegrunt_options_base::s_init_use_cuda( bool use_cuda )
+//{
+//	if( s_verbose && s_out && s_use_cuda )
+//	{
+//		*s_out << "apegrunt: use CUDA if available.\n";
+//	}
+//}
+//#endif // APEGRUNT_NO_CUDA
 
 void Apegrunt_options_base::s_init_fuse_duplicates( bool flag )
 {

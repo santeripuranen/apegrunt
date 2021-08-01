@@ -1,6 +1,6 @@
 /** @file Alignment_impl_base.hpp
 
-	Copyright (c) 2016-2017 Santeri Puranen.
+	Copyright (c) 2016-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -31,6 +31,7 @@
 
 #include "Alignment.h"
 #include "StateVector.h"
+#include "StateVector_mutator.hpp"
 #include "StateVector_utility.hpp"
 #include "Apegrunt_utility.hpp"
 #include "Loci_parsers.hpp"
@@ -63,10 +64,7 @@ public:
 	using block_accounting_t = typename Alignment<state_t>::block_accounting_t;
 	using block_accounting_ptr = typename Alignment<state_t>::block_accounting_ptr;
 
-	using block_weight_t = typename Alignment<state_t>::block_weight_t;
-	using block_weights_t = typename Alignment<state_t>::block_weights_t;
-	using block_weights_ptr = typename Alignment<state_t>::block_weights_ptr;
-
+	using block_container_t = typename Alignment<state_t>::block_container_t;
 	using block_storage_t = typename Alignment<state_t>::block_storage_t;
 	using block_storage_ptr = typename Alignment<state_t>::block_storage_ptr;
 
@@ -93,6 +91,53 @@ public:
 	const std::string& id_string() const { return m_id_string; }
 	void set_id_string( const std::string& id_string ) { m_id_string = id_string; }
 	void set_id_string( std::string&& id_string ) { m_id_string = std::move(id_string); }
+
+	Alignment_ptr<state_t> subset( Loci_ptr positions, std::ostream *out=nullptr ) const
+	{
+		using boost::get;
+
+		if( positions->size() == 0 ) { return Alignment_ptr<StateT>(); }
+
+		auto subset_alignment = std::make_shared<AlignmentT>();
+		subset_alignment->set_id_string( this->id_string() + ( positions->id_string().empty() ? "" : "."+positions->id_string() ) );
+		subset_alignment->set_loci_translation( apegrunt::combine(this->get_loci_translation(), positions) );
+		subset_alignment->set_n_original_positions( this->n_original_positions() );
+
+		for( const auto sequence: *this )
+		{
+			auto subset_sequence = StateVector_mutator<typename AlignmentT::statevector_t>( subset_alignment->get_new_sequence( sequence->id_string() ) );
+			subset_sequence.set_weight( sequence->weight() ); // transfer weights
+
+			for( const auto locus_index: positions )
+			{
+				subset_sequence( (*sequence)[locus_index] );
+			}
+		}
+
+		return subset_alignment;
+	}
+
+    Alignment_ptr<state_t> subsample( const Loci_ptr samples, std::ostream *out=nullptr ) const
+    {
+		using boost::get;
+
+		if( samples->size() == 0 ) { return Alignment_ptr<StateT>(); }
+
+		auto subsample_alignment = std::make_shared<AlignmentT>();
+		subsample_alignment->set_id_string( this->id_string() + ( samples->id_string().empty() ? "" : "."+samples->id_string() ) );
+		subsample_alignment->set_loci_translation( this->get_loci_translation() );
+		subsample_alignment->set_n_original_positions( this->n_original_positions() );
+
+		for( auto seqindex: *samples )
+		{
+			auto sequence = (*this)[seqindex];
+			auto new_sequence = StateVector_mutator<typename AlignmentT::statevector_t>( subsample_alignment->get_new_sequence( sequence->id_string() ) );
+			//new_sequence.set_weight( sequence->weight() ); // not transferring weights here, since the set of samples changes
+			for( const auto state: sequence ) {	new_sequence(state); }
+		}
+
+		return subsample_alignment;
+    }
 
 	typename w_frequency_t::value_type effective_size() const
 	{
@@ -128,7 +173,7 @@ public:
 	}
 
     inline void set_loci_translation( Loci_ptr translation_table ) { m_loci_translation_table = translation_table; }
-    inline Loci_ptr get_loci_translation()
+    inline Loci_ptr get_loci_translation() const
     {
     	if( !m_loci_translation_table )
     	{
@@ -143,12 +188,6 @@ public:
     void statistics( std::ostream *out ) const
     {
     	// dummy implementation
-    }
-
-    block_weights_ptr get_block_weights()
-    {
-    	// dummy implementation
-    	return block_weights_ptr();
     }
 
     inline block_accounting_ptr get_block_accounting() { return block_accounting_ptr(); } // default implementation returns empty shared_ptr
@@ -169,7 +208,7 @@ private:
 	using const_ref_cast_t = const derived_type&;
 
 	std::string m_id_string;
-	Loci_ptr m_loci_translation_table;
+	mutable Loci_ptr m_loci_translation_table;
 	std::size_t m_n_original_positions;
 
 	virtual Alignment_ptr<state_t> clone_impl() const { return static_cast<const_cast_t>(this)->clone(); }
@@ -182,6 +221,9 @@ private:
 	const_iterator cend_impl() const override { return static_cast<const_cast_t>(this)->cend(); }
 
     value_type square_bracket_operator_impl( std::size_t index ) const override { return (*static_cast<const_cast_t>(this))[index]; }
+
+    Alignment_ptr<state_t> subset_impl( const Loci_ptr positions, std::ostream *out=nullptr ) const override { return static_cast<const_cast_t>(this)->subset(positions,out); }
+    Alignment_ptr<state_t> subsample_impl( const Loci_ptr samples, std::ostream *out=nullptr ) const override { return static_cast<const_cast_t>(this)->subsample(samples,out); }
 
     std::size_t size_impl() const override { return static_cast<const_cast_t>(this)->size(); }
     typename w_frequency_t::value_type effective_size_impl() const override { return static_cast<const_cast_t>(this)->effective_size(); }
@@ -202,7 +244,7 @@ private:
     const std::type_info& type_impl() const override { return static_cast<const_cast_t>(this)->type(); }
 
     void set_loci_translation_impl( Loci_ptr translation_table ) override { return static_cast<cast_t>(this)->set_loci_translation( translation_table ); }
-    Loci_ptr get_loci_translation_impl() override { return static_cast<cast_t>(this)->get_loci_translation(); }
+    Loci_ptr get_loci_translation_impl() const override { return static_cast<const_cast_t>(this)->get_loci_translation(); }
 
     void fuse_duplicates_impl() override { static_cast<cast_t>(this)->fuse_duplicates(); }
 
@@ -212,7 +254,6 @@ private:
 
     block_accounting_ptr get_block_accounting_impl() const override { return static_cast<const_cast_t>(this)->get_block_accounting(); }
     block_storage_ptr get_block_storage_impl() const override { return static_cast<const_cast_t>(this)->get_block_storage(); }
-    block_weights_ptr get_block_weights_impl() const override { return static_cast<const_cast_t>(this)->get_block_weights(); }
 
     block_indices_ptr get_block_indices_impl() const override { return static_cast<const_cast_t>(this)->get_block_indices(); }
 

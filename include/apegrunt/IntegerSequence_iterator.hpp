@@ -1,6 +1,6 @@
 /** @file IntegerSequence_iterator.hpp
  
-	Copyright (c) 2016-2020 Santeri Puranen.
+	Copyright (c) 2016-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -39,8 +39,8 @@ struct IntegerSequence_const_iterator
 	using value_type = typename range_type::index_t;
 	using reference = const value_type&;
 	using pointer = const value_type*;
-	using iterator_category = std::random_access_iterator_tag;
-	//using iterator_category = std::forward_iterator_tag;
+	//using iterator_category = std::random_access_iterator_tag;
+	using iterator_category = std::forward_iterator_tag;
 	using difference_type = std::ptrdiff_t; //almost always ptrdiff_t
 
 	using my_type = IntegerSequence_const_iterator<range_type>;
@@ -70,7 +70,7 @@ inline bool operator<=( const IntegerSequence_const_iterator<RangeT>& lhs, const
 template< typename RangeT >
 inline bool operator>=( const IntegerSequence_const_iterator<RangeT>& lhs, const IntegerSequence_const_iterator<RangeT>& rhs ) { return !(lhs < rhs); }
 
-template< typename ContainerT>
+template< typename ContainerT >
 struct back_insert_iterator
 {
 	using container_t = ContainerT;

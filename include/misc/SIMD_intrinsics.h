@@ -51,6 +51,11 @@
 #define NO_INTRINSICS
 #endif
 
+#ifdef __POPCNT__
+#pragma message("Using POPCNT intrinsics")
+#include <immintrin.h>
+#endif
+
 #if defined(__MIC__) || defined(__AVX2__) || defined(__AVX__) || defined(__SSE3__) || defined(__SSE2__)
 #define REQUIRE_ALIGNED_MEMORY
 #endif

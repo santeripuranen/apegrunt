@@ -22,6 +22,7 @@
 #define APEGRUNT_VECTOR_OPERATIONS_HPP
 
 #include <type_traits> // for std::enable_if
+#include <cmath>
 
 #include "Vector_forward.h"
 #include "Vector_interface.hpp"
@@ -102,8 +103,6 @@ inline RealT mask_sum_xlogx( const Vector<RealT,Capacity,View>& x, IntegerT mask
 {
 	using std::log;
 	RealT s(0);
-	//const std::bitset<std::numeric_limits<IntegerT>::digits> m(mask);
-	//for( std::size_t i=0; i < Capacity; ++i ) { if( m[i] ) { s += x[i] * log( x[i] ); } }
 	for( std::size_t i=0; i < Capacity; ++i ) { if( mask & (1<<i) ) { s += x[i] * log( x[i] ); } }
 	return s;
 }

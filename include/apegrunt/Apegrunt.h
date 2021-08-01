@@ -1,7 +1,7 @@
 /** @file Apegrunt.h
 	Top-level include file for Apegrunt.
 
-	Copyright (c) 2016-2017 Santeri Puranen.
+	Copyright (c) 2016-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -23,17 +23,13 @@
 #ifndef APEGRUNT_H
 #define APEGRUNT_H
 
-#ifndef APEGRUNT_NO_TBB // Threading with Threading Building Blocks
-#include "tbb/tbb_stddef.h"
-#include "tbb/task_scheduler_init.h"
-#endif // #ifndef APEGRUNT_NO_TBB
-
 #include "Apegrunt_options.h"
 #include "Apegrunt_utility.hpp"
 
 #include "Alignment.h"
 #include "Alignment_parsers.hpp"
 #include "Alignment_generators.hpp"
+#include "Alignment_filter.hpp"
 #include "Alignment_impl_block_compressed_storage.hpp"
 #include "StateVector_impl_block_compressed_alignment_storage.hpp"
 #include "Alignment_utility.hpp"

@@ -1,6 +1,6 @@
-/** @file Array_view_iterator_forward.h
- 
-	Copyright (c) 2016-2017 Santeri Puranen.
+/** @file Apegrunt_functional.h
+
+	Copyright (c) 2016-2020 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -18,14 +18,16 @@
 	@author Santeri Puranen
 	$Id: $
 */
-#ifndef APEGRUNT_ARRAY_VIEW_ITERATOR_FORWARD_H
-#define APEGRUNT_ARRAY_VIEW_ITERATOR_FORWARD_H
+
+#ifndef APEGRUNT_FUNCTIONAL_H
+#define APEGRUNT_FUNCTIONAL_H
 
 namespace apegrunt {
 
-template< typename ArrayViewT >
-class Array_view_iterator;
+template< typename T > struct hash;
+
+template< typename T > struct equal_to;
 
 } // namespace apegrunt
 
-#endif // APEGRUNT_ARRAY_VIEW_ITERATOR_FORWARD_H
+#endif // APEGRUNT_FUNCTIONAL_H

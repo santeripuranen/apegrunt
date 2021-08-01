@@ -42,7 +42,7 @@ namespace apegrunt {
 namespace accumulators {
 
 template< typename Sample, typename ... Args >
-std::vector< distribution_bin<Sample> > distribution_cumulative( boost::accumulators::accumulator_set< Sample, Args... >& acc )
+std::vector< distribution_bin<Sample> > distribution_cumulative( const boost::accumulators::accumulator_set< Sample, Args... >& acc )
 {
 	using value_type = distribution_bin<Sample>;
 	using result_type = std::vector< value_type >;
@@ -56,12 +56,17 @@ std::vector< distribution_bin<Sample> > distribution_cumulative( boost::accumula
 	const auto& d = distribution( acc );
 	result_type bins( distribution_bincount( acc ) );
 
+	value_type local{0,0,0};
+
 	std::transform( cbegin(d), cend(d), rbegin(bins),
-		[=]( value_type local, const auto node ) {
-			const auto& dbin = access_bin(node);
-			local.m_count += count(dbin);
-			local.m_variance = variance(dbin);
-			local.m_mean = mean(dbin);
+		[&local]( /*value_type& local,*/ const auto& node ) {
+			//const auto& dbin = access_bin(node);
+			//local.m_count += count(dbin);
+			//local.m_variance = variance(dbin);
+			//local.m_mean = mean(dbin);
+			local.m_count += count(access_bin(node));
+			local.m_variance = variance(access_bin(node));
+			local.m_mean = mean(access_bin(node));
 			return local;
 		}
 	);

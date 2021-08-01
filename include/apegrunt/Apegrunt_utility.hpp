@@ -24,6 +24,8 @@
 #include <iostream>
 #include <iomanip>
 #include <cmath>
+#include <algorithm>
+#include <memory>
 
 #include <boost/tuple/tuple.hpp>
 #include <boost/range/iterator_range_core.hpp>
@@ -86,17 +88,30 @@ inline IteratorT binary_search( IteratorT first, IteratorT last, const typename 
     return last;
 }
 
-struct my_div_t { uint64_t quot; uint64_t rem; };
-my_div_t my_div( uint64_t n, uint64_t div ) { my_div_t result{}; result.quot=n/div; result.rem=n%div; return result; }
+template< typename IteratorT, typename T, typename UnaryCompT >
+inline IteratorT binary_search( IteratorT first, IteratorT last, const T& key, UnaryCompT cmp )
+{
+	first = std::lower_bound(first, last, key, cmp);
+	return first == last ? last : ( cmp(*first,key) ? last : first );
+}
 
+template< typename IntegerT >
+inline bool is_true( IntegerT mask, std::size_t pos ) { return  mask & (1<<pos); }
+
+template<typename UIntegerT=uint64_t> struct my_div_t { UIntegerT quot; UIntegerT rem; };
+template<typename UIntegerT=uint64_t> my_div_t<UIntegerT> my_div( UIntegerT n, UIntegerT div ) { my_div_t<UIntegerT> result{}; result.quot=n/div; result.rem=n%div; return result; }
+//struct my_div_t { uint64_t quot; uint64_t rem; };
+//my_div_t my_div( uint64_t n, uint64_t div ) { my_div_t result{}; result.quot=n/div; result.rem=n%div; return result; }
+
+template< typename UIntegerT=uint64_t >
 struct memory_string
 {
-	memory_string( uint64_t mem_in_bytes ) : m_mem_in_bytes(mem_in_bytes) { }
+	memory_string( UIntegerT mem_in_bytes ) : m_mem_in_bytes(mem_in_bytes) { }
 	~memory_string() { }
 
 	std::ostream& operator()( std::ostream& os ) const
 	{
-		my_div_t result{};
+		my_div_t<UIntegerT> result{};
 		result.quot = m_mem_in_bytes;
 		std::size_t n = 0;
 
@@ -105,7 +120,7 @@ struct memory_string
 		while( result.quot > 1024 && n < 4 )
 		{
 			++n;
-			result = my_div(result.quot,1000);
+			result = my_div(result.quot,UIntegerT(1000));
 			//std::cout << "rem=" << result.rem << " quot=" << result.quot << " n=" << n << "\n";
 		};
 
@@ -127,9 +142,19 @@ struct memory_string
 	uint64_t m_mem_in_bytes;
 };
 
-std::ostream& operator<< ( std::ostream& os, const memory_string& mem )
+template< typename UIntegerT=uint64_t >
+std::ostream& operator<< ( std::ostream& os, const memory_string<UIntegerT>& mem )
 {
 	return mem(os);
+}
+
+// power-of-2 ceiling mask
+template< typename RealT >
+inline constexpr RealT pow2_ceil_mask( RealT x )
+{
+	RealT mask(0);
+	while( x ) { x = x >> 1; mask = (mask << 1) | 1; }
+	return mask;
 }
 
 } // namespace apegrunt

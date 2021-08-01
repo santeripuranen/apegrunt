@@ -31,32 +31,15 @@
 
 namespace apegrunt {
 
-Loci_ptr extract_set_node_indices( const Graph_ptr& graph )
-{
-	std::vector<std::size_t> indices;
-	for( const auto& edge: *graph )
-	{
-		if( bool(edge) )
-		{
-			indices.push_back( edge.node1() );
-			indices.push_back( edge.node2() );
-		}
-	}
-	std::sort( indices.begin(), indices.end(), std::less<std::size_t>() );
-	auto end = std::unique( indices.begin(), indices.end() );
-	indices.erase( end, indices.end() );
-	indices.shrink_to_fit();
-
-	return apegrunt::make_Loci_list(std::move(indices),0);
-}
-
+// UnaryPredicate should accept a const Edge& as argument and return
+// a bool indicating whether to extract the node indices of that edge
 template< typename UnaryPredicate >
-Loci_ptr extract_threshold_node_indices( const Graph_ptr& graph, UnaryPredicate p )
+Loci_ptr extract_node_indices( const Graph_ptr& graph, UnaryPredicate p )
 {
 	std::vector<std::size_t> indices;
 	for( const auto& edge: *graph )
 	{
-		if( p(edge.weight()) )
+		if( p(edge) )
 		{
 			indices.push_back( edge.node1() );
 			indices.push_back( edge.node2() );

@@ -1,6 +1,6 @@
 /** @file IntegerSequence_operations_forward.h
 
-	Copyright (c) 2016-2020 Santeri Puranen.
+	Copyright (c) 2016-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -31,29 +31,14 @@
 namespace apegrunt {
 
 // forward declarations
-
-template< typename SequenceT >
-std::ostream& operator<< ( std::ostream& os, const IntegerSequence< SequenceT >& container );
-
-template< typename ContainerT >
-ContainerT set_intersection( const ContainerT& a, const ContainerT& b );
-
-// sugar: shorthand for set_intersection; however, we shouldn't declare anything with such a generic signature here, or else there will be trouble elsewhere
-//template< typename ContainerT >
-//ContainerT operator&( const ContainerT& a, const ContainerT& b );
-
-template< typename SequenceT, typename RealT=double >
-RealT intersect_and_gather( const IntegerSequence< SequenceT >& a, const IntegerSequence< SequenceT >& b, const std::vector<RealT>& weights );
-
 template< typename ContainerT >
 ContainerT set_union( const ContainerT& a, const ContainerT& b );
 
-// sugar: shorthand for set_union; however, we shouldn't declare anything with such a generic signature here, or else there will be trouble elsewhere
-//template< typename ContainerT >
-//ContainerT operator|( const ContainerT& a, const ContainerT& b );
-
 template< typename ContainerT >
 ContainerT set_union( const std::vector< std::reference_wrapper<const ContainerT> > & sets );
+
+template< typename ContainerT, typename UnaryFunction >
+UnaryFunction inplace_set_differences_and_for_each_in_intersection( ContainerT& a, ContainerT& b, UnaryFunction f );
 
 } // namespace apegrunt
 

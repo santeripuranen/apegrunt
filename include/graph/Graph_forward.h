@@ -27,8 +27,11 @@
 namespace apegrunt {
 
 // forward declarations
+//template< bool Directed=false >
 class Graph;
 
+//template< bool Directed=false >
+//using Graph_ptr = std::shared_ptr< Graph<Directed> >;
 using Graph_ptr = std::shared_ptr< Graph >;
 
 template< typename GraphT, typename... Args >

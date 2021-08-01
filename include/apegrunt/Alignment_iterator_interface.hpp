@@ -62,7 +62,7 @@ public:
     inline bool operator<( const my_type& rhs ) const { return this->lt_operator_impl( rhs ); }
 
     inline const std::type_info& type() const { return this->type_impl(); }
-    inline std::shared_ptr<my_type> clone() const { return this->clone_impl(); }
+    inline std::unique_ptr<my_type> clone() const { return this->clone_impl(); }
 
 private:
     virtual my_type& pre_increment_operator_impl() = 0;
@@ -74,7 +74,7 @@ private:
     virtual bool lt_operator_impl( const my_type& rhs ) const = 0;
 
     virtual const std::type_info& type_impl() const = 0;
-    virtual std::shared_ptr<my_type> clone_impl() const = 0;
+    virtual std::unique_ptr<my_type> clone_impl() const = 0;
 };
 
 template< typename StateVectorT >
@@ -108,7 +108,7 @@ public:
 	iterator& operator=( const my_type& rhs ) { m_impl = rhs.m_impl->clone(); return *this; }
 
 	template< typename ImplT >
-	Alignment_iterator( std::shared_ptr<ImplT>&& impl ) : m_impl( std::move(impl) ) { }
+	Alignment_iterator( std::unique_ptr<ImplT>&& impl ) : m_impl( std::move(impl) ) { }
 
 	inline iterator& operator++() { m_impl->operator++(); return *this; }
 //    inline const_iterator operator++(int) { (*m_impl)++; return *this; }
@@ -120,7 +120,7 @@ public:
     inline bool operator<( const my_type& rhs ) const { return *m_impl < *(rhs.m_impl); }
 
 private:
-    std::shared_ptr< apegrunt::iterator::Alignment_iterator_impl<value_type> > m_impl;
+    std::unique_ptr< apegrunt::iterator::Alignment_iterator_impl<value_type> > m_impl;
 };
 
 template< typename StateT> inline bool operator!=( const Alignment_iterator<StateT>& lhs, const Alignment_iterator<StateT>& rhs ) { return !(lhs == rhs); }
@@ -155,7 +155,7 @@ public:
     inline bool operator<( const my_type& rhs ) const { return this->lt_operator_impl( rhs ); }
 
     inline const std::type_info& type() const { return this->type_impl(); }
-    inline std::shared_ptr<my_type> clone() const { return this->clone_impl(); }
+    inline std::unique_ptr<my_type> clone() const { return this->clone_impl(); }
 
 private:
     virtual my_type& pre_increment_operator_impl() = 0;
@@ -167,7 +167,7 @@ private:
     virtual bool lt_operator_impl( const my_type& rhs ) const = 0;
 
     virtual const std::type_info& type_impl() const = 0;
-    virtual std::shared_ptr<my_type> clone_impl() const = 0;
+    virtual std::unique_ptr<my_type> clone_impl() const = 0;
 };
 
 template< typename StateVectorT >
@@ -201,7 +201,7 @@ public:
 	const_iterator& operator=( const my_type& rhs ) { m_impl = rhs.m_impl->clone(); return *this; }
 
 	template< typename ImplT >
-	Alignment_const_iterator( std::shared_ptr<ImplT>&& impl ) : m_impl( std::move(impl) ) { }
+	Alignment_const_iterator( std::unique_ptr<ImplT>&& impl ) : m_impl( std::move(impl) ) { }
 
 	inline const_iterator& operator++() { m_impl->operator++(); return *this; }
 //    inline const_iterator operator++(int) { (*m_impl)++; return *this; }
@@ -213,7 +213,7 @@ public:
     inline bool operator<( const my_type& rhs ) const { return *m_impl < *(rhs.m_impl); }
 
 private:
-    std::shared_ptr< apegrunt::iterator::Alignment_const_iterator_impl<value_type> > m_impl;
+    std::unique_ptr< apegrunt::iterator::Alignment_const_iterator_impl<value_type> > m_impl;
 };
 
 template< typename StateT > inline bool operator!=( const Alignment_const_iterator<StateT>& lhs, const Alignment_const_iterator<StateT>& rhs ) { return !(lhs == rhs); }
