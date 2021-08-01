@@ -56,7 +56,7 @@ struct distribution_generator_csv : distribution_generator_base< distribution_ge
 			if( 0 != cnt )
 			{
 				// produce output for each populated bin
-				os << mean(bin) << " " << cnt << " " << variance(bin) << " " << mean(bin)/std << " " << double(cnt)/double(dcount)*binwidth << "\n";
+				os << std::fixed << mean(bin) << " " << cnt << " " << variance(bin) << " " << mean(bin)/std << " " << double(cnt)/double(dcount)*binwidth << "\n";
 			}
 		}
 	}
