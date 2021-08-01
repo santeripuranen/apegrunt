@@ -94,8 +94,7 @@ public:
 	using block_indices_t = std::vector< std::size_t >;
 	using block_indices_ptr = std::shared_ptr< block_indices_t >;
 
-	using block_type = State_block< State_holder<state_t>, apegrunt::StateBlock_size >;
-//	using compressed_block_type = Compressed_state_block< State_holder<state_t>, apegrunt::StateBlock_size >;
+	using block_type = State_block< state_t, apegrunt::StateBlock_size >;
 
 	using allocator_t = memory::AlignedAllocator<block_type,alignof(block_type)>;
 	using block_storage_t = std::vector< std::vector< block_type, allocator_t > >;
