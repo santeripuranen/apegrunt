@@ -49,7 +49,7 @@ bool generate_Alignment( Alignment_ptr<StateT> alignment, std::ostream* outstrea
 		for( const auto& sequence: alignment )
 		{
 			*outstream << ">" << sequence->id_string() << "\n";
-			for( const auto& state: sequence ) { *outstream << state; }
+			for( const auto& state: sequence ) { *outstream << to_char(state); }
 			*outstream << "\n";
 		}
 		return true;
