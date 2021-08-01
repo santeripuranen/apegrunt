@@ -310,6 +310,9 @@ public:
 
 	inline bool is_similar_to( const my_type& rhs, std::size_t min_identical ) const
 	{
+	inline bool is_similar_to( const my_type& rhs, std::size_t min_identical ) const
+	{
+		using boost::get;
 		std::size_t n(0);
 
 		const auto lhs_indices = this->get_block_indices(); // hold 'em so we don't lose 'em
@@ -318,32 +321,38 @@ public:
 		const auto& lhs_block_indices = *lhs_indices;
 		const auto& rhs_block_indices = *rhs_indices;
 
+		const auto size = std::min(this->size(),rhs.size());
+		const auto lbs = apegrunt::get_last_block_size(size);
+		const auto lbi = apegrunt::get_last_block_index(size);
 		const std::size_t n_indices = std::min( lhs_block_indices.size(), rhs_block_indices.size() ) - (lbs!=apegrunt::StateBlock_size); // "-1": process the last, potentially partially filled block separately
 
 		if( m_block_storage == rhs.m_block_storage ) // this and rhs belong to the same Alignment
 		{
-			const auto& block_storage = *(m_block_storage.get());
-			for( std::size_t i = 0; i < n_indices; ++i )
+			auto nidentical = [](const auto& blocks, auto i, auto j) { return apegrunt::count_identical( blocks[i], blocks[j] ); };
+			auto remain(n_indices);
+			for( auto zipped: apegrunt::zip_range(lhs_block_indices,rhs_block_indices,*m_block_storage) )
 			{
-				n += m_block_indices[i] == rhs.m_block_indices[i] ? N : count_identical( block_storage[i][m_block_indices[i]], block_storage[i][rhs.m_block_indices[i]] );
-				if( n+(n_indices-i)*N < min_identical ) { return false; } // +1 for the last (it could be partially filled, but we give it the benefit of doubt)
-				else if ( n >= min_identical ) { return true; }
+				n += ( get<0>(zipped) == get<1>(zipped) ? N : nidentical(get<2>(zipped), get<0>(zipped), get<1>(zipped)) );
+				if( min_identical > n+N*(--remain)+lbs ) { return false; }
+				else if( n >= min_identical ) { return true; }
 			}
 		}
 		else
 		{
-			for( std::size_t i = 0; i < n_indices; ++i ) // compare pair indices
+			for( std::size_t i = 0; i < n_indices; ++i )
 			{
-				n += count_identical( this->get_block(i), rhs.get_block(i) );
+				n += apegrunt::count_identical( this->get_block(i), rhs.get_block(i) );
+				if( min_identical > n+(n_indices-i)*N+lbs ) { return false; } // +1 for the last (it could be partially filled, but we give it the benefit of doubt)
+				else if ( n >= min_identical ) { return true; }
 			}
 		}
-		// we should never really reach this point in practice
+		// we will seldom actually reach this point in practice
 		{
-			const auto my_block = this->get_block(n_indices); // last common block
-			const auto rhs_block = rhs.get_block(n_indices); // last common block
+			const auto my_block = this->get_block(lbi); // last common block
+			const auto rhs_block = rhs.get_block(lbi); // last common block
 			for( std::size_t i=0; i< std::min(m_pos,rhs.m_pos); ++i ) { my_block[i] == rhs_block[i] && ++n; }
 		}
-		return n > min_identical ? true : false;
+		return n >= min_identical; // ? true : false;
 	}
 
 	inline std::size_t size() const { return m_size; }
