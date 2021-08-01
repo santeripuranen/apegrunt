@@ -28,7 +28,6 @@
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/nvp.hpp>
-//#include <boost/range/iterator_range_core.hpp>
 
 #include "Alignment_forward.h"
 #include "Alignment_iterator.h"
@@ -81,11 +80,7 @@ public:
 	using distance_matrix_t = std::vector<uint32_t>;
 	using distance_matrix_ptr = std::shared_ptr< distance_matrix_t >;
 
-	using block_weight_t = std::array< real_t, number_of_states<state_t>::value >;
-	using block_weights_t = std::vector< std::vector<block_weight_t> >;
-	using block_weights_ptr = std::shared_ptr< block_weights_t >;
-
-	using block_index_t = uint32_t; // uint16_t is only good for alignments up to 2^16 (=65536) samples
+	using block_index_t = uint32_t;
 	//using block_accounting_container_t = std::vector<block_index_t>;
 	using block_accounting_container_t = apegrunt::Apegrunt_bitset<block_index_t>;
 	using block_accounting_t = std::vector< std::vector< block_accounting_container_t > >;
@@ -97,16 +92,19 @@ public:
 	using block_type = State_block< state_t, apegrunt::StateBlock_size >;
 
 	using allocator_t = memory::AlignedAllocator<block_type,alignof(block_type)>;
-	using block_storage_t = std::vector< std::vector< block_type, allocator_t > >;
+	//using block_storage_t = std::vector< std::vector< block_type, allocator_t > >;
+
+	using block_container_t = std::vector< block_type, allocator_t >;
+	using block_storage_t = std::vector< block_container_t >;
 	using block_storage_ptr = std::shared_ptr< block_storage_t >;
 
 	using statecount_t = uint8_t;
-	using statecount_block_t = apegrunt::Vector< statecount_t, apegrunt::StateBlock_size >; //std::array< statecount_t, apegrunt::StateBlock_size >;
+	using statecount_block_t = apegrunt::Vector< statecount_t, apegrunt::StateBlock_size >;
 	using statecount_block_storage_t = std::vector< statecount_block_t >;
 	using statecount_block_storage_ptr = std::shared_ptr< statecount_block_storage_t >;
 
 	using statepresence_t = uint8_t;
-	using statepresence_block_t = apegrunt::Vector< statepresence_t, apegrunt::StateBlock_size >; //std::array< statepresence_t, apegrunt::StateBlock_size >;
+	using statepresence_block_t = apegrunt::Vector< statepresence_t, apegrunt::StateBlock_size >;
 	using statepresence_block_storage_t = std::vector< statepresence_block_t >;
 	using statepresence_block_storage_ptr = std::shared_ptr< statepresence_block_storage_t >;
 
@@ -145,7 +143,7 @@ public:
     inline const std::type_info& type() const { return this->type_impl(); }
 
     inline void set_loci_translation( Loci_ptr translation_table ) { return this->set_loci_translation_impl( translation_table ); }
-    inline Loci_ptr get_loci_translation() { return this->get_loci_translation_impl(); }
+    inline Loci_ptr get_loci_translation() const { return this->get_loci_translation_impl(); }
 
 	inline void fuse_duplicates() { this->fuse_duplicates_impl(); }
 
@@ -155,8 +153,6 @@ public:
 
 	inline block_accounting_ptr get_block_accounting() const { return this->get_block_accounting_impl(); }
 	inline block_storage_ptr get_block_storage() const { return this->get_block_storage_impl(); }
-	inline block_weights_ptr get_block_weights() const { return this->get_block_weights_impl(); }
-
 	inline block_indices_ptr get_block_indices() const { return this->get_block_indices_impl(); }
 
 	inline statecount_block_storage_ptr get_statecount_blocks() { return this->get_statecount_blocks_impl(); }
@@ -193,7 +189,7 @@ private:
     virtual const std::type_info& type_impl() const = 0;
 
     virtual void set_loci_translation_impl( Loci_ptr translation_table ) = 0;
-    virtual Loci_ptr get_loci_translation_impl() = 0;
+    virtual Loci_ptr get_loci_translation_impl() const = 0;
 
     virtual void fuse_duplicates_impl() = 0;
 
@@ -203,8 +199,6 @@ private:
 
     virtual block_accounting_ptr get_block_accounting_impl() const = 0;
     virtual block_storage_ptr get_block_storage_impl() const = 0;
-    virtual block_weights_ptr get_block_weights_impl() const = 0;
-
     virtual block_indices_ptr get_block_indices_impl() const = 0;
 
 	virtual statecount_block_storage_ptr get_statecount_blocks_impl() const = 0;

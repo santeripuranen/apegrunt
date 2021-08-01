@@ -63,10 +63,7 @@ public:
 	using block_accounting_t = typename Alignment<state_t>::block_accounting_t;
 	using block_accounting_ptr = typename Alignment<state_t>::block_accounting_ptr;
 
-	using block_weight_t = typename Alignment<state_t>::block_weight_t;
-	using block_weights_t = typename Alignment<state_t>::block_weights_t;
-	using block_weights_ptr = typename Alignment<state_t>::block_weights_ptr;
-
+	using block_container_t = typename Alignment<state_t>::block_container_t;
 	using block_storage_t = typename Alignment<state_t>::block_storage_t;
 	using block_storage_ptr = typename Alignment<state_t>::block_storage_ptr;
 
@@ -128,7 +125,7 @@ public:
 	}
 
     inline void set_loci_translation( Loci_ptr translation_table ) { m_loci_translation_table = translation_table; }
-    inline Loci_ptr get_loci_translation()
+    inline Loci_ptr get_loci_translation() const
     {
     	if( !m_loci_translation_table )
     	{
@@ -143,12 +140,6 @@ public:
     void statistics( std::ostream *out ) const
     {
     	// dummy implementation
-    }
-
-    block_weights_ptr get_block_weights()
-    {
-    	// dummy implementation
-    	return block_weights_ptr();
     }
 
     inline block_accounting_ptr get_block_accounting() { return block_accounting_ptr(); } // default implementation returns empty shared_ptr
@@ -169,7 +160,7 @@ private:
 	using const_ref_cast_t = const derived_type&;
 
 	std::string m_id_string;
-	Loci_ptr m_loci_translation_table;
+	mutable Loci_ptr m_loci_translation_table;
 	std::size_t m_n_original_positions;
 
 	virtual Alignment_ptr<state_t> clone_impl() const { return static_cast<const_cast_t>(this)->clone(); }
@@ -202,7 +193,7 @@ private:
     const std::type_info& type_impl() const override { return static_cast<const_cast_t>(this)->type(); }
 
     void set_loci_translation_impl( Loci_ptr translation_table ) override { return static_cast<cast_t>(this)->set_loci_translation( translation_table ); }
-    Loci_ptr get_loci_translation_impl() override { return static_cast<cast_t>(this)->get_loci_translation(); }
+    Loci_ptr get_loci_translation_impl() const override { return static_cast<const_cast_t>(this)->get_loci_translation(); }
 
     void fuse_duplicates_impl() override { static_cast<cast_t>(this)->fuse_duplicates(); }
 
@@ -212,7 +203,6 @@ private:
 
     block_accounting_ptr get_block_accounting_impl() const override { return static_cast<const_cast_t>(this)->get_block_accounting(); }
     block_storage_ptr get_block_storage_impl() const override { return static_cast<const_cast_t>(this)->get_block_storage(); }
-    block_weights_ptr get_block_weights_impl() const override { return static_cast<const_cast_t>(this)->get_block_weights(); }
 
     block_indices_ptr get_block_indices_impl() const override { return static_cast<const_cast_t>(this)->get_block_indices(); }
 
