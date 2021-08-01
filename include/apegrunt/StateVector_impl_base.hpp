@@ -40,6 +40,7 @@ public:
 
 	using block_index_t = typename StateVector<state_t>::block_index_t;
 	using block_index_container_t = typename StateVector<state_t>::block_index_container_t;
+	using block_index_container_ptr = typename StateVector<state_t>::block_index_container_ptr;
 
 	enum { block_size = block_type::N };
 
@@ -180,7 +181,7 @@ private:
     }
 
     block_type get_block_impl( std::size_t index ) const override { return static_cast<const_cast_t>(this)->get_block(index); }
-    const block_index_container_t& get_block_indices_impl() const { return static_cast<const_cast_t>(this)->get_block_indices(); }
+    const block_index_container_ptr get_block_indices_impl() const { return static_cast<const_cast_t>(this)->get_block_indices(); }
 
     //const frequencies_type& frequencies_impl() const override { return static_cast<const_cast_t>(this)->frequencies(); }
 

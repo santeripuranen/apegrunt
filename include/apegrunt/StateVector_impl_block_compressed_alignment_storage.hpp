@@ -70,6 +70,7 @@ public:
 	using parent_t = Alignment_impl_block_compressed_storage< my_type >;
 	using block_index_t = typename base_type::block_index_t;
 	using block_index_container_t = typename base_type::block_index_container_t;
+	using block_index_container_ptr = typename base_type::block_index_container_ptr;
 
 	using allocator_t = memory::AlignedAllocator<block_type,alignof(block_type)>;
 	using block_storage_t = std::vector< std::vector< block_type, allocator_t > >;
@@ -89,28 +90,54 @@ public:
 	StateVector_impl_block_compressed_alignment_storage() : base_type(), m_dirty(false) { }
 	~StateVector_impl_block_compressed_alignment_storage() = default;
 
+	StateVector_impl_block_compressed_alignment_storage( std::size_t id=0 )
+	: base_type(id, std::to_string(id)),
+	  m_block_storage(),
+	  m_block_adder(), // always after m_block_storage
+	  m_block_indices(),
+	  m_cache(),
+	  m_access_cache_block(),
+	  m_access_cache_col(std::numeric_limits<std::size_t>::max()),
+	  m_block_col(0),
+	  m_pos(0),
+	  m_size(0),
+	  m_dirty(false),
+	  m_has_block_indices(false),
+	  m_cache_block_indices_mutex(),
+	{
+	}
+
 	StateVector_impl_block_compressed_alignment_storage( const my_type& other )
 	: base_type( other ),
 	  m_block_storage(other.m_block_storage),
+	  m_block_adder(other.m_block_adder), // always after m_block_storage
 	  m_block_indices(other.m_block_indices),
 	  m_cache(other.m_cache),
+	  m_access_cache_block(other.m_access_cache_block),
+	  m_access_cache_col(other.m_access_cache_col),
 	  m_block_col(other.m_block_col),
 	  m_pos(other.m_pos),
 	  m_size(other.m_size),
-	  m_dirty(other.m_dirty)
+	  m_dirty(other.m_dirty),
+	  m_has_block_indices(other.m_has_block_indices),
+	  m_cache_block_indices_mutex(),
 	{
 	}
 
 	StateVector_impl_block_compressed_alignment_storage( my_type&& other ) noexcept
-	: base_type( other.id_string(), other.multiplicity() ),
-	  m_block_storage( std::move( other.m_block_storage ) ),
-	  m_block_indices( std::move( other.m_block_indices ) ),
-	  m_index( std::move( other.m_index  ) ),
-	  m_cache( std::move( other.m_cache ) ),
+	: base_type( other ),
+	  m_block_storage( std::move(other.m_block_storage) ),
+	  m_block_adder( std::move(other.m_block_adder) ), // always after m_block_storage
+	  m_block_indices( std::move(other.m_block_indices) ),
+	  m_cache( std::move(other.m_cache) ),
+	  m_access_cache_block( std::move(other.m_access_cache_block) ),
+	  m_access_cache_col(other.m_access_cache_col),
 	  m_block_col(other.m_block_col),
 	  m_pos(other.m_pos),
 	  m_size(other.m_size),
-	  m_dirty(other.m_dirty)
+	  m_dirty(other.m_dirty),
+	  m_has_block_indices(other.m_has_block_indices),
+	  m_cache_block_indices_mutex(),
 	{
 	}
 
@@ -126,10 +153,13 @@ public:
 		m_block_storage = std::move(other.m_block_storage);
 		m_block_indices = std::move(other.m_block_indices);
 		m_cache = other.m_cache;
+		m_access_cache_block = std::move(other.m_access_cache_block);
+		m_access_cache_col = other.m_access_cache_col;
 		m_block_col = other.m_block_col;
 		m_pos = other.m_pos;
 		m_size = other.m_size;
 		m_dirty = other.m_dirty;
+		m_has_block_indices = other.m_has_block_indices;
 		return *this;
 	}
 // */
@@ -146,10 +176,13 @@ public:
 		m_block_storage = other.m_block_storage;
 		m_block_indices = other.m_block_indices;
 		m_cache = other.m_cache;
+		m_access_cache_block = other.m_access_cache_block;
+		m_access_cache_col = other.m_access_cache_col;
 		m_block_col = other.m_block_col;
 		m_pos = other.m_pos;
 		m_size = other.m_size;
 		m_dirty = other.m_dirty;
+		m_has_block_indices = other.m_has_block_indices;
 		return *this;
 	}
 
@@ -159,10 +192,14 @@ public:
 	  m_block_adder( block_adder ),
 	  m_block_indices(),
 	  m_cache(),
+	  m_access_cache_block(),
+	  m_access_cache_col(0),
 	  m_block_col(0),
 	  m_pos(0),
 	  m_size(0),
-	  m_dirty(false)
+	  m_dirty(false),
+	  m_has_block_indices(false),
+	  m_cache_block_indices_mutex(),
 	{
 		//if( size_hint > 0 ) { m_block_indices->reserve(size_hint); }
 	}
@@ -196,14 +233,14 @@ public:
     	{
     		if( m_block_storage == rhs.m_block_storage ) // this and rhs belong to the same Alignment
     		{
-    			for( auto index_pair: zip_range( m_block_indices, rhs.m_block_indices ) )
+    			for( auto index_pair: zip_range( *m_block_indices, *rhs.m_block_indices ) )
     			{
     				if( get<0>(index_pair) != get<1>(index_pair) ) { return false; } // compare pair indices
     			}
     		}
     		else
     		{
-				for( std::size_t i=0; i < m_block_indices.size(); ++i )
+				for( std::size_t i=0; i < m_block_indices->size(); ++i )
 				{
 					if( this->get_block(i) != rhs.get_block(i) ) { return false; }
 				}
@@ -220,41 +257,38 @@ public:
     	// simplified version
 		if( index != m_access_cache_col )
 		{
-			if( index != m_access_cache_col )
-			{
-				m_access_cache_col = index;
-				//m_access_cache_block = (*m_block_storage)[index][ m_block_indices[index] ];
-				m_access_cache_block = m_block_adder->get(index, m_block_indices[index]); // ..but trust that we are internally consistent
-			}
-			return m_access_cache_block;
+			m_access_cache_col = index;
+			m_access_cache_block = m_block_adder->get(index, (*this->get_block_indices())[index]); // Block_adder will return block_type() if block index is not found.
 		}
-		else
-		{
-			// Disable error message in Release mode. We will regularly hit this condition when using iterator access and the size of
-			// StateVector is an even multiple of BlockSize: the caching iterator will preload blocks when incremented, even when incremented
-			// to one-past-end (i.e. iterator == iterator.end(), which should be caught in calling code). End users need not be burdened with the
-			// confusing error message, as the condition is completely benign in that case.
-#ifndef NDEBUG
-			*Apegrunt_options::get_err_stream() << "apegrunt-DEBUG: apegrunt::StateVector block index=" << index << " out_of_range" << std::endl;
-#endif // NDEBUG
-			return block_type();
-		}
+		return m_access_cache_block;
     }
 
-    inline const block_index_container_t& get_block_indices() const { return m_block_indices; }
+    inline const block_index_container_ptr get_block_indices() const
+    {
+		if( !m_has_block_indices ) // no unnecessary fighting for the mutex
+		{
+			m_cache_block_indices_mutex.lock();
+			if( !m_block_indices ) { this->cache_block_indices(); }
+			m_cache_block_indices_mutex.unlock();
+		}
+    	return m_block_indices;
+    }
 
 	inline std::size_t operator&&( const my_type& rhs ) const
 	{
 		std::size_t n = 0;
 
-		const std::size_t n_indices = std::min( m_block_indices.size(), rhs.m_block_indices.size() ) -1; // "-1": process the last, potentially partially filled block separately
+		const auto& lhs_block_indices = *(this->get_block_indices());
+		const auto& rhs_block_indices = *(rhs.get_block_indices());
+
+		const std::size_t n_indices = std::min( lhs_block_indices.size(), rhs_block_indices.size() ) -1; // "-1": process the last, potentially partially filled block separately
 		if( m_block_storage == rhs.m_block_storage ) // this and rhs belong to the same Alignment
 		{
 			const auto& block_storage = *(m_block_storage.get());
 			for( std::size_t i = 0; i < n_indices; ++i )
 			{
 				// compare pair indices first; count identical states only if needed
-				n += m_block_indices[i] == rhs.m_block_indices[i] ? N : count_identical( block_storage[i][m_block_indices[i]], block_storage[i][rhs.m_block_indices[i]] );
+				n += lhs_block_indices[i] == rhs_block_indices[i] ? N : count_identical( block_storage[i][lhs_block_indices[i]], block_storage[i][rhs_block_indices[i]] );
 			}
 		}
 		else
@@ -276,7 +310,13 @@ public:
 	{
 		std::size_t n(0);
 
-		const std::size_t n_indices = std::min( m_block_indices.size(), rhs.m_block_indices.size() ) -1; // "-1": process the last, potentially partially filled block separately
+		const auto lhs_indices = this->get_block_indices(); // hold 'em so we don't lose 'em
+		const auto rhs_indices = rhs.get_block_indices(); // hold 'em so we don't lose 'em
+
+		const auto& lhs_block_indices = *lhs_indices;
+		const auto& rhs_block_indices = *rhs_indices;
+
+		const std::size_t n_indices = std::min( lhs_block_indices.size(), rhs_block_indices.size() ) - (lbs!=apegrunt::StateBlock_size); // "-1": process the last, potentially partially filled block separately
 
 		if( m_block_storage == rhs.m_block_storage ) // this and rhs belong to the same Alignment
 		{
@@ -306,19 +346,15 @@ public:
 
 	inline std::size_t size() const { return m_size; }
 
-	inline std::size_t bytesize() const { return apegrunt::bytesize(m_block_indices); }
-
-	//inline void report_times() const { std::cout << "parse=" << m_build_timer_parse.elapsed_cycles() << " store=" << m_build_timer_store.elapsed_cycles() << std::endl; }
+	inline std::size_t bytesize() const { return apegrunt::bytesize(*m_block_indices); }
 
 	inline const std::type_info& type() const { return typeid(my_type); }
-/*
-	inline StateVector_subscript_proxy< State_holder<state_t> > subscript_proxy() const
+
+	block_storage_ptr get_block_storage() const
 	{
-#pragma message( "WARNING: not implemented!" )
-		std::cerr << "\nWARNING: apegrunt::StateVector_impl_block_compressed_alignment_storage::subscript_proxy() NOT implemented.\n" << std::endl;
-		return StateVector_subscript_proxy< State_holder<state_t> >( this );
+		return m_block_storage;
 	}
-*/
+
 private:
 	using iterator_impl = apegrunt::iterator::StateVector_iterator_impl_block_compressed_alignment_storage< State_holder<state_t>, StateVector_impl_block_compressed_alignment_storage<state_t> >;
 	using const_iterator_impl = apegrunt::iterator::StateVector_iterator_impl_block_compressed_alignment_storage< State_holder<state_t>, StateVector_impl_block_compressed_alignment_storage<state_t> >;
@@ -330,7 +366,7 @@ private:
 
 	block_storage_ptr m_block_storage;
 	block_adder_ptr m_block_adder;
-	block_index_container_t m_block_indices;
+	mutable block_index_container_ptr m_block_indices;
 	block_type m_cache;
 	mutable block_type m_access_cache_block;
 	mutable std::size_t m_access_cache_col;
@@ -341,6 +377,10 @@ private:
 	bool m_dirty;
 	//stopwatch::stopwatch m_build_timer_parse; // ( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
 	//stopwatch::stopwatch m_build_timer_store;
+
+	mutable bool m_has_block_indices;
+	mutable std::mutex m_cache_block_indices_mutex;
+
 
 	enum : std::size_t { MODULO_MASK=N-1 };
 	enum { MODULO_NBITS=my_type::popcnt<std::size_t>(MODULO_MASK) };
@@ -399,7 +439,7 @@ private:
 	//> clear internal state, with the exception of link to parent Alignment
 	void clear()
 	{
-		m_block_indices.clear();
+		m_block_indices->clear();
 		m_cache.clear();
 		m_frequencies.fill(0);
 		m_block_col=0;
@@ -443,6 +483,29 @@ private:
 			}
 			m_dirty=false;
 		}
+	}
+
+	inline void cache_block_indices() const
+	{
+		if( !m_block_indices ) { m_block_indices = std::make_shared<block_index_container_t>(); }
+		auto& bis = *m_block_indices;
+		bis.reserve( m_block_storage->size() );
+
+		auto block_accounting = m_block_adder->get_block_accounting();
+
+		const block_index_t my_id(this->id());
+
+		for( const auto& column_acc: *block_accounting )
+		{
+			auto block_index(0);
+			for( const auto& acc: column_acc )
+			{
+				if( contains(acc, my_id) ) { bis.push_back(block_index); break; }
+				++block_index;
+			}
+		}
+
+		m_has_block_indices = true;
 	}
 
 	// Allow parser access to private members

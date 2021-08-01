@@ -76,6 +76,7 @@ public:
 
 	using block_index_t = uint32_t; // uint16_t is sufficient only for at most 2^16 (=65536) blocks
 	using block_index_container_t = std::vector< block_index_t >;
+	using block_index_container_ptr = std::shared_ptr< block_index_container_t >;
 	//using block_index_container_t = IndexVector< block_index_t >;
 
 	StateVector() = default;
@@ -88,7 +89,7 @@ public:
     inline bool operator==( const my_type& rhs ) const { return this->equal_to_operator_impl( rhs ); }
 
     inline block_type get_block( std::size_t index ) const { return this->get_block_impl( index ); }
-    inline const block_index_container_t& get_block_indices() const { return this->get_block_indices_impl(); }
+    inline const block_index_container_ptr get_block_indices() const { return this->get_block_indices_impl(); }
 
     //inline const frequencies_type& frequencies() const { return this->frequencies_impl(); }
 
@@ -128,7 +129,7 @@ private:
     virtual bool equal_to_operator_impl( const my_type& rhs ) const = 0;
 
     virtual block_type get_block_impl( std::size_t index ) const = 0;
-    virtual const block_index_container_t& get_block_indices_impl() const = 0;
+    virtual const block_index_container_ptr get_block_indices_impl() const = 0;
 
     //virtual const frequencies_type& frequencies_impl() const = 0;
 
