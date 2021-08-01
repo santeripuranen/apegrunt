@@ -118,6 +118,7 @@ endif()
 # Add Boost libraries
 if( NOT APEGRUNT_NO_BOOST )
 	target_link_libraries( libapegrunt ${Boost_LIBRARIES} )
+	target_link_libraries( libapegrunt ${Boost_LIBRARIES} libz.a liblzma.a )
 	target_link_libraries( apegrunt ${Boost_LIBRARIES} )
 endif()
 
