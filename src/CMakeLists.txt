@@ -17,6 +17,8 @@ link_directories( ${Boost_LIBRARY_DIRS} )
 set( APEGRUNT_LIBRARY_SOURCES
 	Apegrunt_options.cpp
 	aligned_allocator.cpp
+	StateVector_impl_block_compressed_alignment_storage_sse2.cpp
+	StateVector_impl_block_compressed_alignment_storage_avx2.cpp
 	StateVector_state_types.cpp
 	Stopwatch.cpp
 ) # *.cpp *.hpp *.cc
@@ -25,25 +27,26 @@ set( APEGRUNT_BINARY_SOURCES
 	Apegrunt.cpp
 )
 
+set_source_files_properties( StateVector_impl_block_compressed_alignment_storage_sse2.cpp PROPERTIES COMPILE_FLAGS "-msse2 -mpopcnt" )
+set_source_files_properties( StateVector_impl_block_compressed_alignment_storage_avx2.cpp PROPERTIES COMPILE_FLAGS "-mavx2 -mpopcnt" )
 
 #################################
 ## Define compiler and linker options
 ###
 
 ### General optimization flags
-set( APEGRUNT_OPTIMIZATION_FLAGS "${APEGRUNT_OPTIMIZATION_FLAGS} -O3 -msse3 -mpopcnt -static-libstdc++" )
-set( APEGRUNT_OPTIMIZATION_FLAGS "${APEGRUNT_OPTIMIZATION_FLAGS} -ftree-vectorize -fwhole-program" )
-set( APEGRUNT_OPTIMIZATION_FLAGS "${APEGRUNT_OPTIMIZATION_FLAGS} -flto -ffat-lto-objects" ) # -flto-report" )
+set( APEGRUNT_OPTIMIZATION_FLAGS "${APEGRUNT_OPTIMIZATION_FLAGS} -O3 -msse2" ) # -mpopcnt" )
+set( APEGRUNT_OPTIMIZATION_FLAGS "${APEGRUNT_OPTIMIZATION_FLAGS} -ftree-vectorize" ) # don't use -fwhole-program in combination with -flto
 
 # GCC-specific optimization flags
-set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "${APEGRUNT_GCC_OPTIMIZATION_FLAGS}" )
+set( APEGRUNT_GCC_OPTIMIZATION_FLAGS "-flto -ffat-lto-objects" ) # -flto-report"
 
 # Clang-specific optimization flags
-set( APEGRUNT_CLANG_OPTIMIZATION_FLAGS "${APEGRUNT_CLANG_OPTIMIZATION_FLAGS}" )
+set( APEGRUNT_CLANG_OPTIMIZATION_FLAGS "-flto=thin" )
 
 
 ### General release build flags
-set( APEGRUNT_RELEASE_FLAGS "-Wall -w -DNDEBUG -fvisibility=hidden -fvisibility-inlines-hidden" )
+set( APEGRUNT_RELEASE_FLAGS "-DNDEBUG -Wall -w -fvisibility=hidden -fvisibility-inlines-hidden" ) # CMake will add '-O2 -DNDEBUG' for Release builds
 
 # GCC-specific release build flags
 set( APEGRUNT_GCC_RELEASE_FLAGS "-Wl,--strip-all" )
@@ -52,14 +55,15 @@ set( APEGRUNT_GCC_RELEASE_FLAGS "-Wl,--strip-all" )
 set( APEGRUNT_CLANG_RELEASE_FLAGS "-Wl,-s" )
 
 if("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
-	set( CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${APEGRUNT_OPTIMIZATION_FLAGS} ${APEGRUNT_GCC_OPTIMIZATION_FLAGS} ${APEGRUNT_RELEASE_FLAGS} ${APEGRUNT_GCC_RELEASE_FLAGS}")
+	# Bulldoze CMake's default CMAKE_CXX_FLAGS_RELEASE
+	set( CMAKE_CXX_FLAGS_RELEASE "${APEGRUNT_OPTIMIZATION_FLAGS} ${APEGRUNT_GCC_OPTIMIZATION_FLAGS} ${APEGRUNT_RELEASE_FLAGS} ${APEGRUNT_GCC_RELEASE_FLAGS}")
 elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
 	set( CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${APEGRUNT_OPTIMIZATION_FLAGS} ${APEGRUNT_CLANG_OPTIMIZATION_FLAGS} ${APEGRUNT_RELEASE_FLAGS} ${APEGRUNT_CLANG_RELEASE_FLAGS}")
 endif()
 
 
 ### General debug build flags
-set( APEGRUNT_DEBUG_FLAGS "-pg -g -ftree-vectorizer-verbose=2 -Wall" )
+set( APEGRUNT_DEBUG_FLAGS "-O3 -g -ftree-vectorizer-verbose=2 -Wall" ) # "-Wignored-attributes"
 
 # GCC-specific debug build flags
 set( APEGRUNT_GCC_DEBUG_FLAGS "" )

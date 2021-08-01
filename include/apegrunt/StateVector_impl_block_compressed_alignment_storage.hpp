@@ -29,6 +29,10 @@
 #include <memory> // for std::make_shared
 #include <algorithm> // for std::find and std::min
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/nvp.hpp>
 #include <boost/range/irange.hpp>
@@ -56,6 +60,23 @@
 
 namespace apegrunt {
 
+// forward declarations
+template< typename StateT >
+class StateVector_impl_block_compressed_alignment_storage;
+
+template< typename StateT >
+bool is_similar_to_impl(
+		const StateVector_impl_block_compressed_alignment_storage< StateT >& lhs,
+		const StateVector_impl_block_compressed_alignment_storage< StateT >& rhs,
+		std::size_t min_identical );
+
+template< typename StateT >
+bool (*init_is_similar_to_pimpl(void))(
+	const StateVector_impl_block_compressed_alignment_storage< StateT >& lhs,
+	const StateVector_impl_block_compressed_alignment_storage< StateT >& rhs,
+	std::size_t );
+
+// Template implementation
 template< typename StateT >
 class StateVector_impl_block_compressed_alignment_storage : public StateVector_impl_base< StateVector_impl_block_compressed_alignment_storage<StateT>, StateT >
 {
@@ -87,7 +108,7 @@ public:
 	using value_type = typename base_type::value_type;
 
 	//StateVector_impl_block_compressed_alignment_storage() = delete;
-	StateVector_impl_block_compressed_alignment_storage() : base_type(), m_dirty(false) { }
+	StateVector_impl_block_compressed_alignment_storage() : base_type(), m_dirty(false), m_has_block_indices(false), m_is_similar_to_pimpl(init_is_similar_to_pimpl<state_t>()) { }
 	~StateVector_impl_block_compressed_alignment_storage() = default;
 
 	StateVector_impl_block_compressed_alignment_storage( std::size_t id=0 )
@@ -104,6 +125,7 @@ public:
 	  m_dirty(false),
 	  m_has_block_indices(false),
 	  m_cache_block_indices_mutex(),
+	  m_is_similar_to_pimpl(init_is_similar_to_pimpl<state_t>())
 	{
 	}
 
@@ -121,6 +143,7 @@ public:
 	  m_dirty(other.m_dirty),
 	  m_has_block_indices(other.m_has_block_indices),
 	  m_cache_block_indices_mutex(),
+	  m_is_similar_to_pimpl(other.m_is_similar_to_pimpl)
 	{
 	}
 
@@ -138,9 +161,10 @@ public:
 	  m_dirty(other.m_dirty),
 	  m_has_block_indices(other.m_has_block_indices),
 	  m_cache_block_indices_mutex(),
+	  m_is_similar_to_pimpl(other.m_is_similar_to_pimpl)
 	{
 	}
-
+// /*
 	my_type& operator=( my_type&& other ) noexcept
 	{
 		// in base class:
@@ -151,6 +175,7 @@ public:
 
 		// in my_type:
 		m_block_storage = std::move(other.m_block_storage);
+		m_block_adder = std::move(other.m_block_adder);
 		m_block_indices = std::move(other.m_block_indices);
 		m_cache = other.m_cache;
 		m_access_cache_block = std::move(other.m_access_cache_block);
@@ -160,6 +185,7 @@ public:
 		m_size = other.m_size;
 		m_dirty = other.m_dirty;
 		m_has_block_indices = other.m_has_block_indices;
+		m_is_similar_to_pimpl = other.m_is_similar_to_pimpl;
 		return *this;
 	}
 // */
@@ -200,6 +226,7 @@ public:
 	  m_dirty(false),
 	  m_has_block_indices(false),
 	  m_cache_block_indices_mutex(),
+	  m_is_similar_to_pimpl(init_is_similar_to_pimpl<state_t>())
 	{
 		//if( size_hint > 0 ) { m_block_indices->reserve(size_hint); }
 	}
@@ -310,6 +337,9 @@ public:
 
 	inline bool is_similar_to( const my_type& rhs, std::size_t min_identical ) const
 	{
+		return (*m_is_similar_to_pimpl)(*this,rhs,min_identical);
+	}
+/*
 	inline bool is_similar_to( const my_type& rhs, std::size_t min_identical ) const
 	{
 		using boost::get;
@@ -354,7 +384,7 @@ public:
 		}
 		return n >= min_identical; // ? true : false;
 	}
-
+*/
 	inline std::size_t size() const { return m_size; }
 
 	inline std::size_t bytesize() const { return apegrunt::bytesize(*m_block_indices); }
@@ -389,12 +419,11 @@ private:
 	std::size_t m_pos;
 	std::size_t m_size;
 	bool m_dirty;
-	//stopwatch::stopwatch m_build_timer_parse; // ( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
-	//stopwatch::stopwatch m_build_timer_store;
 
 	mutable bool m_has_block_indices;
 	mutable std::mutex m_cache_block_indices_mutex;
 
+	bool (*m_is_similar_to_pimpl)(const my_type& lhs, const my_type& rhs, std::size_t);
 
 	enum : std::size_t { MODULO_MASK=N-1 };
 	enum { MODULO_NBITS=my_type::popcnt<std::size_t>(MODULO_MASK) };
@@ -526,6 +555,7 @@ private:
 	STATEVECTOR_PARSER_GRAMMAR_FRIENDS(my_type) // macro defined in #include "StateVector_parser_forward.h"
 
 	friend class StateVector_mutator<my_type>;
+	//friend bool is_similar_to_impl<state_t>( const my_type& lhs, const my_type& rhs, std::size_t min_identical );
 
 	/// boost.serialization interface.
 	friend class boost::serialization::access;
@@ -573,22 +603,132 @@ private:
 	statevector_t *m_statevector;
 };
 
-/*
-template< typename StateT >
-class StateVector_subscript_proxy
+struct Generic_tag;
+// /*
+template< typename StateT, typename Codegen=Generic_tag >
+bool is_similar_to_impl(
+		const StateVector_impl_block_compressed_alignment_storage< StateT >& lhs,
+		const StateVector_impl_block_compressed_alignment_storage< StateT >& rhs,
+		std::size_t min_identical
+	)
 {
-public:
-	StateVector_subscript_proxy() { }
-	~StateVector_subscript_proxy() { }
+	using boost::get;
+	std::size_t n(0);
 
-	StateVector_subscript_proxy( const std::vector<StateT>* container ) : m_container(container) { }
+	const std::size_t N = apegrunt::StateBlock_size;
 
-	inline StateT operator[]( std::size_t index ) const { return (*m_container)[index]; }
+	const auto lhs_indices = lhs.get_block_indices(); // hold 'em so we don't lose 'em
+	const auto rhs_indices = rhs.get_block_indices(); // hold 'em so we don't lose 'em
 
-private:
-	const std::vector<StateT> *m_container;
-};
-*/
+	const auto& lhs_block_indices = *lhs_indices;
+	const auto& rhs_block_indices = *rhs_indices;
+
+	const auto lhs_blocks = lhs.get_block_storage(); // hold 'em so we don't lose 'em
+	const auto rhs_blocks = rhs.get_block_storage(); // hold 'em so we don't lose 'em
+
+	const auto size = std::min(lhs.size(),rhs.size());
+	const auto lbs = apegrunt::get_last_block_size(size);
+	const auto lbi = apegrunt::get_last_block_index(size);
+	const std::size_t n_indices = std::min( lhs_block_indices.size(), rhs_block_indices.size() ) - (lbs!=N); // if last block is partially filled, then process it separately
+
+	if( lhs_blocks == rhs_blocks ) // this and rhs belong to the same Alignment
+	{
+		auto nidentical = [](const auto& blocks, auto i, auto j) { return apegrunt::count_identical( blocks[i], blocks[j] ); };
+		auto remain(n_indices);
+		for( auto zipped: apegrunt::zip_range(lhs_block_indices,rhs_block_indices,*lhs_blocks) )
+		{
+			n += ( get<0>(zipped) == get<1>(zipped) ? N : nidentical(get<2>(zipped), get<0>(zipped), get<1>(zipped)) );
+			if( min_identical > n+N*(--remain)+lbs ) { return false; }
+			else if( n >= min_identical ) { return true; }
+		}
+	}
+	else // this and rhs belong to different Alignments
+	{
+		for( std::size_t i = 0; i < n_indices; ++i )
+		{
+			n += apegrunt::count_identical( lhs.get_block(i), rhs.get_block(i) );
+			if( min_identical > n+(n_indices-i)*N+lbs ) { return false; }
+			else if ( n >= min_identical ) { return true; }
+		}
+	}
+	// we will seldom actually reach this point in practice
+	{
+		const auto lhs_block = lhs.get_block(lbi); // last common block
+		const auto rhs_block = rhs.get_block(lbi); // last common block
+		for( std::size_t i=0; i<lbs; ++i ) {lhs_block[i] == rhs_block[i] && ++n; }
+	}
+	return n >= min_identical; // ? true : false;
+}
+
+//struct SSE2_tag;
+template< typename StateT >
+bool is_similar_to_impl_sse2(
+	const StateVector_impl_block_compressed_alignment_storage< StateT >& lhs,
+	const StateVector_impl_block_compressed_alignment_storage< StateT >& rhs,
+	std::size_t min_identical
+);
+
+//struct AVX2_tag;
+template< typename StateT >
+bool is_similar_to_impl_avx2(
+	const StateVector_impl_block_compressed_alignment_storage< StateT >& lhs,
+	const StateVector_impl_block_compressed_alignment_storage< StateT >& rhs,
+	std::size_t min_identical
+);
+
+// return a pointer to implementation (i.e. a function pointer)
+template< typename StateT >
+bool (*init_is_similar_to_pimpl(void))(
+	const StateVector_impl_block_compressed_alignment_storage< StateT >& lhs,
+	const StateVector_impl_block_compressed_alignment_storage< StateT >& rhs,
+	std::size_t )
+{
+#ifndef NO_INTRINSICS
+
+#ifdef __GNUG__ // GNU C++
+	if( __builtin_cpu_supports("popcnt") )
+	{
+		if( __builtin_cpu_supports("avx2") )
+		{
+			//std::cout << "AVX2+POPCNT" << std::endl;
+			return &is_similar_to_impl_avx2<StateT>;
+		}
+		else if( __builtin_cpu_supports("sse2") )
+		{
+			//std::cout << "SSE2+POPCNT" << std::endl;
+			return &is_similar_to_impl_sse2<StateT>;
+		}
+	}
+	else
+	{
+		//std::cout << "GENERIC" << std::endl;
+		return &is_similar_to_impl<StateT,Generic_tag>;
+	}
+#endif
+
+#ifdef __INTEL_COMPILER // icc, icpc
+	if( _may_i_use_cpu_feature(_FEATURE_POPCNT | _FEATURE_AVX2) )
+	{
+		//std::cout << "AVX2+POPCNT" << std::endl;
+		return &is_similar_to_impl_avx2<StateT>;
+	}
+	else if( _may_i_use_cpu_feature(_FEATURE_POPCNT | _FEATURE_SSE2) )
+	{
+		//std::cout << "SSE2+POPCNT" << std::endl;
+		return &is_similar_to_impl_sse2<StateT>;
+	}
+	else
+	{
+		//std::cout << "GENERIC" << std::endl;
+		return &is_similar_to_impl<StateT,Generic_tag>;
+	}
+#endif // __INTEL_COMPILER
+
+#else // NO_INTRINSICS
+	return &is_similar_to_impl<StateT,Generic_tag>;
+#endif // !NO_INTRINSICS
+}
+
 } // namespace apegrunt
 
 #endif // APEGRUNT_STATEVECTOR_IMPL_BLOCK_COMPRESSED_ALIGNMENT_STORAGE_HPP
