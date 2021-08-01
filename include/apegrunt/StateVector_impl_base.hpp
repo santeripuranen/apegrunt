@@ -33,7 +33,7 @@ public:
 	using state_t = StateT;
 	using const_iterator = typename StateVector<state_t>::const_iterator;
 	using iterator = typename StateVector<state_t>::iterator;
-	using value_type = typename const_iterator::value_type;
+	using value_type = state_t; //typename const_iterator::value_type;
 	using block_type = typename StateVector<state_t>::block_type;
 	//using frequencies_type = typename StateVector<state_t>::frequencies_type;
 	using weight_type = typename StateVector<state_t>::weight_type;
@@ -46,18 +46,22 @@ public:
 	StateVector_impl_base() : m_multiplicity(1), m_weight(1) { }
 	virtual ~StateVector_impl_base() = default;
 
-	StateVector_impl_base( const std::string& id_string, std::size_t multiplicity=1, weight_type weight=1 ) : m_multiplicity(multiplicity), m_weight(weight), m_id_string(id_string) { }
+	//StateVector_impl_base( const std::string& id_string, std::size_t multiplicity=1, weight_type weight=1 ) : m_multiplicity(multiplicity), m_weight(weight), m_id_string(id_string) { }
+	StateVector_impl_base( std::size_t id ) : m_id(id), m_multiplicity(1), m_weight(1), m_id_string() { }
+	StateVector_impl_base( std::size_t id, const std::string& id_string ) : m_id(id), m_multiplicity(1), m_weight(1), m_id_string(id_string) { }
 
-	const std::string& id_string() const { return m_id_string; }
-	void set_id_string( const std::string& id_string ) { m_id_string = id_string; }
+	inline std::size_t bytesize() const { return this->size_impl()*sizeof(state_t); }
+
+	inline std::size_t id() const { return m_id; }
+	inline void set_id( std::size_t id ) { m_id = id; }
+	inline const std::string& id_string() const { return m_id_string; }
+	inline void set_id_string( const std::string& id_string ) { m_id_string = id_string; }
 
 	std::size_t multiplicity() const { return m_multiplicity; }
 	void set_multiplicity( std::size_t multiplicity=1 ) { m_multiplicity = multiplicity; } // zero means we're dead
 
 	weight_type weight() const { return m_weight; }
 	void set_weight( weight_type weight=1 ) { m_weight = weight; }
-
-	std::size_t bytesize() const { return this->size_impl(); }
 
 	//bool operator==( const StateVectorT& other ) const { std::cout << "StateVector_impl_base::operator==( const derived_type& other )" << std::endl; return static_cast<const_ref_cast_t>(*this).operator==(other); }
 
@@ -137,7 +141,7 @@ public:
 			if( N+(Npos-n) < hamming_distance_threshold ) { return false; }
 		}
 
-		return N > hamming_distance_threshold ? true: false;
+		return (N > hamming_distance_threshold); // ? true: false;
 	}
 
 private:
@@ -146,7 +150,8 @@ private:
 	using const_cast_t = const derived_type* const;
 	using const_ref_cast_t = const derived_type&;
 
-	std::size_t m_multiplicity; // the number of virtual sequences (identical, or near identical) that this sequence represents
+	/*const*/ std::size_t m_id;
+	mutable std::size_t m_multiplicity; // the number of virtual sequences (identical, or near identical) that this sequence represents
 	weight_type m_weight;
 	std::string m_id_string;
 
@@ -179,10 +184,12 @@ private:
 
     //const frequencies_type& frequencies_impl() const override { return static_cast<const_cast_t>(this)->frequencies(); }
 
-    std::size_t size_impl() const override { return static_cast<const_cast_t>(this)->size(); }
-    const std::string& id_string_impl() const override { return static_cast<const_cast_t>(this)->id_string(); }
+    inline std::size_t size_impl() const override { return static_cast<const_cast_t>(this)->size(); }
+    inline std::size_t bytesize_impl() const override { return static_cast<const_cast_t>(this)->bytesize(); }
 
-    std::size_t bytesize_impl() const override { return static_cast<const_cast_t>(this)->bytesize(); }
+    inline std::size_t id_impl() const override { return static_cast<const_cast_t>(this)->id(); }
+    inline const std::string& id_string_impl() const override { return static_cast<const_cast_t>(this)->id_string(); }
+    inline void set_id_string_impl( const std::string& id_string ) override { static_cast<cast_t>(this)->set_id_string(id_string); }
 
     std::size_t multiplicity_impl() const override { return static_cast<const_cast_t>(this)->multiplicity(); }
 	void set_multiplicity_impl( std::size_t multiplicity ) override { static_cast<cast_t>(this)->set_multiplicity(multiplicity); }

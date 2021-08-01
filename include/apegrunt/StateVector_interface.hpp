@@ -68,7 +68,7 @@ public:
 
 	//using const_iterator = apegrunt::iterator::StateVector_const_iterator;
 	//using iterator = apegrunt::iterator::StateVector_iterator;
-	using value_type = typename const_iterator::value_type;
+	using value_type = state_t; //typename const_iterator::value_type;
 	using block_type = State_block<value_type,apegrunt::StateBlock_size>;
 	//using frequencies_type = std::array< std::size_t, number_of_states<state_t>::value >;
 	using weight_type = double;
@@ -93,9 +93,12 @@ public:
     //inline const frequencies_type& frequencies() const { return this->frequencies_impl(); }
 
     inline std::size_t size() const { return this->size_impl(); }
-    inline const std::string& id_string() const { return this->id_string_impl(); }
-
     inline std::size_t bytesize() const { return this->bytesize_impl(); }
+
+    inline std::size_t id() const { return this->id_impl(); }
+    // no set_id(); id is an internal index defined by the parent Alignment at StateVector construction
+    inline const std::string& id_string() const { return this->id_string_impl(); }
+    inline void set_id_string( const std::string& id_string ) { this->set_id_string_impl(id_string); }
 
     inline std::size_t multiplicity() const { return this->multiplicity_impl(); }
 	inline void set_multiplicity( std::size_t multiplicity=1 ) { this->set_multiplicity_impl(multiplicity); }
@@ -130,9 +133,11 @@ private:
     //virtual const frequencies_type& frequencies_impl() const = 0;
 
     virtual std::size_t size_impl() const = 0;
-    virtual const std::string& id_string_impl() const = 0;
-
     virtual std::size_t bytesize_impl() const = 0;
+
+    virtual std::size_t id_impl() const = 0;
+    virtual const std::string& id_string_impl() const = 0;
+    virtual void set_id_string_impl( const std::string& id_string ) = 0;
 
     virtual std::size_t multiplicity_impl() const = 0;
 	virtual void set_multiplicity_impl( std::size_t multiplicity ) = 0;

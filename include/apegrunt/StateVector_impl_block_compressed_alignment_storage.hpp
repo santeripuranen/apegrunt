@@ -31,6 +31,9 @@
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/nvp.hpp>
+#include <boost/range/irange.hpp>
+
+#include "Alignment_forward.h"
 
 #include "StateVector.h"
 #include "StateVector_impl_base.hpp"
@@ -45,6 +48,8 @@
 #include "State_block.hpp"
 #include "Alignment_impl_block_compressed_storage.hpp"
 #include "aligned_allocator.hpp"
+
+#include "Apegrunt_options.h"
 
 #include "IndexVector.h"
 #include "misc/Stopwatch.hpp"
@@ -72,7 +77,7 @@ public:
 
 	//using block_adder_t = typename parent_t::block_adder_t;
 	//using block_adder_ptr = typename parent_t::block_adder_ptr;
-	using block_adder_t = Block_adder<state_t>;
+	using block_adder_t = Block_adder<state_t,char,32>;
 	using block_adder_ptr = std::shared_ptr< block_adder_t >;
 
 	using const_iterator = typename base_type::const_iterator;
@@ -85,12 +90,10 @@ public:
 	~StateVector_impl_block_compressed_alignment_storage() = default;
 
 	StateVector_impl_block_compressed_alignment_storage( const my_type& other )
-	: base_type( other.id_string(), other.multiplicity() ),
+	: base_type( other ),
 	  m_block_storage(other.m_block_storage),
 	  m_block_indices(other.m_block_indices),
-	  m_index(other.m_index),
 	  m_cache(other.m_cache),
-	  //m_frequencies(other.m_frequencies),
 	  m_block_col(other.m_block_col),
 	  m_pos(other.m_pos),
 	  m_size(other.m_size),
@@ -104,7 +107,6 @@ public:
 	  m_block_indices( std::move( other.m_block_indices ) ),
 	  m_index( std::move( other.m_index  ) ),
 	  m_cache( std::move( other.m_cache ) ),
-	  //m_frequencies( std::move( other.m_frequencies ) ),
 	  m_block_col(other.m_block_col),
 	  m_pos(other.m_pos),
 	  m_size(other.m_size),
@@ -114,63 +116,55 @@ public:
 
 	my_type& operator=( my_type&& other ) noexcept
 	{
-		this->set_id_string( std::move(other.id_string()) );
+		// in base class:
+		this->set_id( other.id() );
 		this->set_multiplicity( other.multiplicity() );
+		this->set_weight( other.weight() );
+		this->set_id_string( other.id_string() );
+
+		// in my_type:
 		m_block_storage = std::move(other.m_block_storage);
 		m_block_indices = std::move(other.m_block_indices);
 		m_cache = other.m_cache;
-		//m_frequencies = other.m_frequencies;
 		m_block_col = other.m_block_col;
 		m_pos = other.m_pos;
 		m_size = other.m_size;
 		m_dirty = other.m_dirty;
 		return *this;
 	}
-/*
+// */
+// /*
 	my_type& operator=( const my_type& other )
 	{
-		this->set_id_string( other.id_string() );
+		// in base class:
+		this->set_id( other.id() );
 		this->set_multiplicity( other.multiplicity() );
+		this->set_weight( other.weight() );
+		this->set_id_string( other.id_string() );
+
+		// in my_type:
 		m_block_storage = other.m_block_storage;
 		m_block_indices = other.m_block_indices;
 		m_cache = other.m_cache;
-		m_frequencies = other.m_frequencies;
 		m_block_col = other.m_block_col;
 		m_pos = other.m_pos;
 		m_size = other.m_size;
 		m_dirty = other.m_dirty;
 		return *this;
 	}
-*/
-	StateVector_impl_block_compressed_alignment_storage( block_storage_ptr& block_storage, const std::string& id_string, std::size_t size_hint=0 )
-	: base_type( id_string ),
-	  m_block_storage( block_storage ),
-	  m_block_indices(),
-	  m_index(0),
-	  m_cache(),
-	  //m_frequencies{0},
-	  m_block_col(0),
-	  m_pos(0),
-	  m_size(0),
-	  m_dirty(false)
-	{
-		if( size_hint > 0 ) { m_block_indices.reserve(size_hint); }
-	}
 
-	StateVector_impl_block_compressed_alignment_storage( block_adder_ptr& block_adder, const std::string& id_string, std::size_t index, std::size_t size_hint=0 )
-	: base_type( id_string ),
+	StateVector_impl_block_compressed_alignment_storage( block_adder_ptr& block_adder, std::size_t id, const std::string& id_string="", std::size_t size_hint=0 )
+	: base_type( id, id_string ),
 	  m_block_storage( block_adder->get_block_storage() ),
 	  m_block_adder( block_adder ),
 	  m_block_indices(),
-	  m_index(index),
 	  m_cache(),
-	  //m_frequencies{0},
 	  m_block_col(0),
 	  m_pos(0),
 	  m_size(0),
 	  m_dirty(false)
 	{
-		if( size_hint > 0 ) { m_block_indices.reserve(size_hint); }
+		//if( size_hint > 0 ) { m_block_indices->reserve(size_hint); }
 	}
 
 	inline const_iterator cbegin() const { return const_iterator( std::make_shared<const_iterator_impl>( 0, 0, this ) ); }
@@ -183,7 +177,7 @@ public:
     {
     	const auto a = std::div( index, N );
 
-    	if( a.quot != m_access_cache_col )
+    	if( std::size_t(a.quot) != m_access_cache_col ) // cast to std::size_t to rid compiler nag about different signedness comparison; a.quot is always positive
     	{
     		this->get_block(a.quot);
     		//m_access_cache_col = a.quot;
@@ -221,11 +215,10 @@ public:
     	}
     	return true;
     }
-
     inline block_type get_block( std::size_t index ) const
     {
-		// guard against invalid block indices from user code..
-		if( index < m_block_indices.size() )
+    	// simplified version
+		if( index != m_access_cache_col )
 		{
 			if( index != m_access_cache_col )
 			{
@@ -249,8 +242,6 @@ public:
     }
 
     inline const block_index_container_t& get_block_indices() const { return m_block_indices; }
-
-    //inline const frequencies_type& frequencies() const { return m_frequencies; }
 
 	inline std::size_t operator&&( const my_type& rhs ) const
 	{
@@ -335,10 +326,11 @@ private:
 	friend iterator_impl;
 	friend const_iterator_impl;
 
+	template< typename IntegerT > static constexpr IntegerT popcnt( IntegerT mask ) { IntegerT n(0); while( mask ) { ++n; mask >>= 1; } return n; }
+
 	block_storage_ptr m_block_storage;
 	block_adder_ptr m_block_adder;
 	block_index_container_t m_block_indices;
-	const std::size_t m_index;
 	block_type m_cache;
 	mutable block_type m_access_cache_block;
 	mutable std::size_t m_access_cache_col;
@@ -350,7 +342,8 @@ private:
 	//stopwatch::stopwatch m_build_timer_parse; // ( Apegrunt_options::verbose() ? Apegrunt_options::get_out_stream() : nullptr ); // for timing statistics
 	//stopwatch::stopwatch m_build_timer_store;
 
-	enum { MODULO_MASK=N-1 };
+	enum : std::size_t { MODULO_MASK=N-1 };
+	enum { MODULO_NBITS=my_type::popcnt<std::size_t>(MODULO_MASK) };
 
 	// Parser interface
 	template< typename T >
@@ -414,12 +407,7 @@ private:
 		m_dirty=false;
 		m_size=0;
 	}
-/*
-	inline void update_frequencies()
-	{
-		for( std::size_t i = 0; i < std::min(m_pos,std::size_t(N)); ++i ) { ++( m_frequencies[std::size_t(m_cache[i])] ); }
-	}
-*/
+
 	inline void flush_block_buffer()
 	{
 		if(m_dirty)
