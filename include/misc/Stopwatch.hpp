@@ -32,22 +32,6 @@
 
 #include <boost/timer/timer.hpp>
 
-/* Usage:
-int function() {
-
-	const int N = 1000;
-	stopwatch::stopwatch cputimer;
-	cputimer.start();
-
-	for( int i=0; i<N; ++i )
-	{
-		// do stuff
-	}
-	cputimer.stop();
-	apegrunt::timer::print_timing_stats( cputimer, N );
-}
-*/
-
 namespace stopwatch {
 
 using std::cout;
@@ -59,23 +43,24 @@ double x_per_n( RealT1 x, RealT2 n )
 	return double(x) / double(n);
 }
 
-double avg_time_in_ns( std::size_t time, std::size_t N )
+template< typename IntegerT >
+double avg_time_in_ns( IntegerT time, IntegerT N )
 {
 	return (double)time / (double)N;
 }
 
-struct my_div_t { uint64_t quot; uint64_t rem; };
+template<typename UIntegerT=uint64_t> struct my_div_t { UIntegerT quot; UIntegerT rem; };
+template<typename UIntegerT=uint64_t> my_div_t<UIntegerT> my_div( UIntegerT n, UIntegerT div ) { my_div_t<UIntegerT> result{}; result.quot=n/div; result.rem=n%div; return result; }
 
-my_div_t my_div( uint64_t n, uint64_t div ) { my_div_t result{}; result.quot=n/div; result.rem=n%div; return result; }
-
+template< typename UIntegerT=uint64_t >
 struct time_string
 {
-	time_string( uint64_t elapsed_time ) : m_elapsed_time(elapsed_time) { }
+	time_string( UIntegerT elapsed_time ) : m_elapsed_time(elapsed_time) { }
 	~time_string() { }
 
 	std::ostream& operator()( std::ostream& os ) const
 	{
-		my_div_t result{};
+		my_div_t<UIntegerT> result{};
 		result.quot = m_elapsed_time;
 		std::size_t n = 0;
 
@@ -84,7 +69,7 @@ struct time_string
 		while( result.quot > 1000 && n < 3 )
 		{
 			++n;
-			result = my_div(result.quot,1000);
+			result = my_div(result.quot,UIntegerT(1000));
 			//std::cout << "rem=" << result.rem << " quot=" << result.quot << " n=" << n << "\n";
 		};
 
@@ -105,7 +90,8 @@ struct time_string
 	uint64_t m_elapsed_time;
 };
 
-std::ostream& operator<< ( std::ostream& os, const time_string& time )
+template< typename UIntegerT=uint64_t >
+std::ostream& operator<< ( std::ostream& os, const time_string<UIntegerT>& time )
 {
 	return time(os);
 }
@@ -191,12 +177,13 @@ private:
 #endif
 
 };
-
+std::ostream& operator<< ( std::ostream& os, const stopwatch& timer );
+/*
 std::ostream& operator<< ( std::ostream& os, const stopwatch& timer )
 {
 	return timer(os);
 }
-
+*/
 } // namespace stopwatch
 
 #endif // STOPWATCH_HPP
