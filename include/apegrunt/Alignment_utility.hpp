@@ -65,22 +65,6 @@ namespace apegrunt {
 template< typename StateT >
 std::string size_string( Alignment_ptr<StateT> alignment ) { std::ostringstream label; label << "L" << alignment->n_loci() << "n" << alignment->size(); return label.str(); }
 
-std::size_t norm2( const std::vector< std::size_t >& v )
-{
-	using std::pow;
-
-	return std::accumulate( cbegin(v), cend(v), std::size_t(0), [=]( std::size_t sum, std::size_t x ) { return sum += x*x; } );
-}
-
-template< typename RealT >
-RealT norm( const std::vector< std::size_t >& v )
-{
-	using real_t = RealT;
-	using std::sqrt;
-	auto n2 = norm2(v);
-	return ( n2 != 0.0 ? sqrt( real_t(n2) ) : 0 );
-}
-
 template< typename StateT >
 std::vector< Alignment_ptr<StateT> > get_alignments( std::size_t max_alignments=std::numeric_limits<std::size_t>::max() )
 {

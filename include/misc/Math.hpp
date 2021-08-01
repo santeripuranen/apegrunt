@@ -21,6 +21,10 @@
 #ifndef APEGRUNT_MATH_HPP
 #define APEGRUNT_MATH_HPP
 
+#include <vector>
+#include <cmath>
+#include <numeric> // for std::accumulate
+
 namespace apegrunt {
 
 /*
@@ -50,6 +54,26 @@ IntegerT ipow(IntegerT base, int exp)
     }
 
     return result;
+}
+
+template< typename RealT >
+std::size_t norm2( const std::vector< RealT >& v )
+{
+	using real_t = RealT;
+	using std::pow;
+	using std::cbegin;
+	using std::cend;
+
+	return std::accumulate( cbegin(v), cend(v), real_t(0), [=]( real_t sum, real_t x ) { return sum += x*x; } );
+}
+
+template< typename RealT >
+RealT norm( const std::vector< std::size_t >& v )
+{
+	using real_t = RealT;
+	using std::sqrt;
+	auto n2 = norm2(v);
+	return ( n2 != 0.0 ? sqrt( real_t(n2) ) : 0 );
 }
 
 } // namespace apegrunt
