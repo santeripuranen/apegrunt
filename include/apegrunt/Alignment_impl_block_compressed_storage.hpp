@@ -436,7 +436,6 @@ public:
 	using block_storage_t = typename base_type::block_storage_t;
 	using block_storage_ptr = typename base_type::block_storage_ptr;
 
-	using block_unit_t = std::pair<std::vector<block_accounting_container_t>,half_block_container_t>;
 	using block_adder_t = Block_adder<state_t,char,32>;
 	using block_adder_ptr = std::shared_ptr< block_adder_t >;
 
