@@ -1,6 +1,6 @@
 /** @file State_block.hpp
 
-	Copyright (c) 2016-2017 Santeri Puranen.
+	Copyright (c) 2016-2021 Santeri Puranen.
 
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as
@@ -24,6 +24,7 @@
 
 #include <cctype>
 #include <functional> // for std::hash
+#include <cstring> // for std::memcpy
 
 #include <bitset>
 #include <limits>
@@ -32,155 +33,295 @@
 #include <boost/serialization/nvp.hpp>
 
 #include "StateVector_state_types.hpp"
+#include "aligned_allocator.hpp"
+
+#include "misc/SIMD_intrinsics.h"
 
 namespace apegrunt {
 
 template< typename MaskT, std::size_t N, typename StencilT >
 constexpr MaskT create_clear( StencilT stencil ) { MaskT mask=0; uint n=0; while( n < N ) { mask = mask | ( MaskT(stencil) << n*8*sizeof(StencilT) ); ++n; } return mask; }
 
+// forward declaration
+template< typename StateT, std::size_t Size > struct State_block;
+
+// const_State_view (a const proxy) wraps a raw state type and enables state references.
+// /*
+template< typename StateT, std::size_t Size >
+struct const_State_view
+{
+	enum { N=Size };
+	using state_t = StateT;
+	using const_state_view_t = const_State_view<state_t,N>;
+
+	using state_block_t = apegrunt::State_block<state_t,Size>;
+
+	using my_type = const_State_view<state_t,N>;
+
+	const_State_view() = delete;
+	const_State_view( const state_block_t& parent, std::size_t pos ) : m_parent(parent), m_pos(pos) { assert(m_pos<Size); }
+	~const_State_view() = default;
+
+	const state_block_t& m_parent;
+	const std::size_t m_pos;
+
+	//template< typename Q = state_t, std::enable_if_t<!std::is_same<Q, char>::value,bool> = true >
+	inline operator state_t() const { return m_parent.m_states[m_pos]; }
+
+	//template< typename IntegerT, typename = typename std::enable_if< std::is_integral<IntegerT>::value && !std::is_same<IntegerT, char>::value >::type >
+	template< typename IntegerT, std::enable_if_t< std::is_integral<IntegerT>::value && !std::is_same<IntegerT, char>::value, bool > = true >
+	inline operator IntegerT() const { return IntegerT( this->operator state_t() ); }
+
+	//template< typename Q = state_t, typename = std::enable_if_t<!std::is_same<Q, char>::value> >
+	template< typename Q = state_t, std::enable_if_t<!std::is_same<Q, char>::value,bool> = true >
+	inline operator char() const { return to_char( state_t(*this) ); }
+
+	inline bool operator==( const my_type& rhs ) const { return state_t(*this) == state_t(rhs); }
+	// we choose to define state_t order based on their internal numerical value; an arbitrary choice, of course, since we deal with categorical variables
+	inline bool operator<( const my_type& rhs ) const { return state_t(*this) < state_t(rhs); }
+};
+// */
+/*
+template< typename StateT, std::size_t Size >
+struct const_State_view
+{
+	enum { N=Size };
+	using state_t = StateT;
+	using const_state_view_t = const_State_view<state_t,N>;
+
+	using state_block_t = apegrunt::State_block<state_t,Size>;
+
+	using my_type = const_State_view<state_t,N>;
+
+	const_State_view() = delete;
+	const_State_view( const state_t& state ) : m_state(state) { }
+	~const_State_view() = default;
+
+	const state_t& m_state;
+
+	//template< typename Q = state_t, std::enable_if_t<!std::is_same<Q, char>::value,bool> = true >
+	inline operator state_t() const { return m_state; }
+
+	//template< typename IntegerT, typename = typename std::enable_if< std::is_integral<IntegerT>::value && !std::is_same<IntegerT, char>::value >::type >
+	template< typename IntegerT, std::enable_if_t< std::is_integral<IntegerT>::value && !std::is_same<IntegerT, char>::value, bool > = true >
+	//inline operator IntegerT() const { return IntegerT( this->operator state_t() ); }
+	inline operator IntegerT() const { return IntegerT( m_state ); }
+
+	//template< typename Q = state_t, typename = std::enable_if_t<!std::is_same<Q, char>::value> >
+	template< typename Q = state_t, std::enable_if_t<!std::is_same<Q, char>::value,bool> = true >
+	inline operator char() const { return to_char( state_t(*this) ); }
+
+	inline bool operator==( const my_type& rhs ) const { return state_t(*this) == state_t(rhs); }
+	// we choose to define state_t order based on their internal numerical value; an arbitrary choice, of course, since we deal with categorical variables
+	inline bool operator<( const my_type& rhs ) const { return state_t(*this) < state_t(rhs); }
+};
+*/
+
+template< typename StateT, std::size_t Size >
+std::ostream& operator<< ( std::ostream& os, const const_State_view<StateT,Size>& state )
+{
+	os << to_char(StateT(state));
+	return os;
+}
+
+template< typename StateT, std::size_t Size >
+constexpr StateT to_state( const const_State_view<StateT,Size>& val ) { return val; }
+
+
+// State_view (a mutator proxy) enables us to take a reference of, and modify, otherwise unreferenceable state
+// types (specifically those that are stored using less that a byte worth of bits).
+// prototype class template; please specialize
+template< typename StateT, std::size_t Size >
+struct State_view
+{
+	enum { N=Size };
+	using state_t = StateT;
+	using stateholder_t = apegrunt::State_holder<state_t>;
+	using const_state_view_t = const_State_view<state_t,N>;
+
+	using state_block_t = apegrunt::State_block<state_t,Size>;
+	//using integer_t = typename state_block_t::internal_t;
+
+	using my_type = State_view<state_t,N>;
+
+	State_view() = delete;
+	State_view( state_block_t& parent, std::size_t pos ) : m_parent(parent), m_pos(pos) { assert(m_pos<Size); }
+	~State_view() = default;
+
+	state_block_t& m_parent;
+	const std::size_t m_pos;
+
+	//template< typename Q = state_t, std::enable_if_t<!std::is_same<Q, char>::value,bool> = true >
+	inline operator state_t() const { return m_parent.m_states[m_pos]; }
+
+	//template< typename IntegerT, typename = typename std::enable_if< std::is_integral<IntegerT>::value && !std::is_same<IntegerT, char>::value >::type >
+	template< typename IntegerT, std::enable_if_t< std::is_integral<IntegerT>::value && !std::is_same<IntegerT, char>::value, bool > = true >
+	inline operator IntegerT() const { return IntegerT( this->operator state_t() ); }
+
+	template< typename Q = state_t, std::enable_if_t<!std::is_same<Q, char>::value,bool> = true >
+	inline operator char() const { return to_char( state_t(*this) ); }
+
+	inline my_type& operator=( state_t state )
+	{
+		m_parent.m_states[m_pos] = state;
+		return *this;
+	}
+
+	inline my_type& operator=( const_state_view_t state )
+	{
+		return *this = state_t(state); // get the concrete state from const_state_view_t and forward
+	}
+
+	inline my_type& operator=( stateholder_t state )
+	{
+		return *this = state_t(state); // peel off stateholder and forward
+	}
+
+	inline bool operator==( const my_type& rhs ) const { return state_t(*this) == state_t(rhs); }
+	// we choose to define state_t order based on their internal numerical value; an arbitrary choice, of course, since we deal with categorical variables
+	inline bool operator<( const my_type& rhs ) const { return state_t(*this) < state_t(rhs); }
+};
+
+template< typename StateT, std::size_t Size >
+std::ostream& operator<< ( std::ostream& os, const State_view<StateT,Size>& state )
+{
+	os << to_char(StateT(state));
+	return os;
+}
+
+template< typename StateT, std::size_t Size >
+constexpr StateT to_state( const State_view<StateT,Size>& val ) { return val; }
+
+
+
+template< typename StateT, std::size_t Size, std::size_t ParentSize >
+struct State_block_view
+{
+	enum { N=Size };
+	using state_t = StateT;
+	using state_block_t = apegrunt::State_block<state_t,ParentSize>;
+
+	using my_type = State_block_view<state_t,N,ParentSize>;
+
+	State_block_view() = delete;
+	State_block_view( const state_block_t& parent, std::size_t pos ) : m_parent(parent), m_pos(pos) { assert(m_pos+Size<=ParentSize); }
+	~State_block_view() = default;
+
+	const state_block_t& m_parent;
+	const std::size_t m_pos;
+
+	template< std::size_t BlockSize >
+	inline operator State_block<state_t,BlockSize>() const { assert(BlockSize<=ParentSize-m_pos); return m_parent.m_states+m_pos; }
+
+	template< std::size_t BlockSize >
+	inline int cmp( const State_block<state_t,BlockSize>& rhs ) { return std::memcmp(m_parent.m_states+m_pos, rhs.m_states, sizeof(state_t)*BlockSize); }
+
+	template< std::size_t BlockSize >
+	inline bool operator==( const State_block<state_t,BlockSize>& rhs ) { return 0 == std::memcmp(m_parent.m_states+m_pos, rhs.m_states, sizeof(state_t)*BlockSize); }
+
+	template< std::size_t BlockSize >
+	inline bool operator<( const State_block<state_t,BlockSize>& rhs ) { return 0 > std::memcmp(m_parent.m_states+m_pos, rhs.m_states, sizeof(state_t)*BlockSize); }
+
+	template< std::size_t BlockSize >
+	inline bool operator>( const State_block<state_t,BlockSize>& rhs ) { return 0 < std::memcmp(m_parent.m_states+m_pos, rhs.m_states, sizeof(state_t)*BlockSize); }
+};
+
 template< typename StateT, std::size_t Size >
 //struct alignas(sizeof(void*)) State_block
-struct alignas(Size) State_block
+struct alignas(std::max(std::size_t(8),Size*sizeof(StateT))) State_block
 {
 	using state_t = StateT;
 	enum { N=Size };
-	enum { N16=N/sizeof(uint16_t) };
-	enum { N32=N/sizeof(uint32_t) };
-	enum { N64=N/sizeof(uint64_t) };
-	enum { CLEAR=uint8_t(gap_state<state_t>::value) };
+	enum : uint8_t { CLEAR=uint8_t(gap_state<state_t>::value) };
+	//enum : uint8_t { CLEAR=uint8_t(0) };
 
-	using my_type = State_block< StateT, N >;
-	using block16_t = uint16_t;
-	using block32_t = uint32_t;
-	using block64_t = uint64_t;
+	using my_type = State_block< state_t, N >;
+	//using stateholder_t = apegrunt::State_holder<state_t>;
+	using const_state_view_t = const_State_view<state_t,N>;
+	using state_view_t = State_view<state_t,N>;
 
-	union {
-		state_t m_states[N];
-	};
+	template<std::size_t BlockSize> using sub_block_t = State_block<state_t,BlockSize>;
+	template<std::size_t BlockSize> using sub_block_view_t = State_block_view<state_t,BlockSize,N>;
+
+	state_t m_states[N];
 
 	State_block() { this->clear(); }
-	~State_block() { } // "= default;" won't work here, since the union type makes it non-trivial
+	~State_block() = default;
 
-	State_block( my_type&& other ) noexcept
-	{
-		for( std::size_t i=0; i < N; ++i ) { m_states[i] = std::move(other.m_states[i]); } // let the compiler do the unrolling
-	}
+	State_block( my_type&& other ) noexcept { this->set(other.m_states); }
+	State_block( const my_type& other ) { this->set(other.m_states); }
+	template< typename Q = state_t, typename = std::enable_if_t<!std::is_same<Q, char>::value> >
+	State_block( const char* states, std::size_t n=N ) { this->set(states,n); }
+	State_block( const state_t* states, std::size_t n=N ) { this->set(states,n); }
 
-	State_block( const my_type& other )
-	{
-		for( std::size_t i=0; i < N; ++i ) { m_states[i] = other.m_states[i]; } // let the compiler do the unrolling
-	}
+	template< typename Q = state_t, typename = std::enable_if_t<!std::is_same<Q, char>::value> >
+	State_block( const State_block<char,N>& other ) { this->set(other.m_states); }
 
-	my_type& operator=( my_type&& other ) noexcept
-	{
-		for( std::size_t i=0; i < N; ++i ) { m_states[i] = std::move(other.m_states[i]); } // let the compiler do the unrolling
-		return *this;
-	}
+	my_type& operator=( my_type&& other ) noexcept { this->set(other.m_states); return *this; }
+	my_type& operator=( const my_type& other ) { this->set(other.m_states); return *this; }
 
-	my_type& operator=( const my_type& other )
-	{
-		for( std::size_t i=0; i < N; ++i ) { m_states[i] = other.m_states[i]; } // let the compiler do the unrolling
-		return *this;
-	}
+	// No range check
+	template< typename Q = state_t, std::enable_if_t<!std::is_same<Q, char>::value,bool> = true >
+	inline void set( const char* states, std::size_t n=N ) { assert(n<=N); for(uint i=0; i<n; ++i) { m_states[i] = apegrunt::char_to_state<state_t>(*(states+i)); } }
+	inline void set( const state_t* states, std::size_t n=N ) { assert(n<=N); std::memcpy(m_states,states,sizeof(state_t)*n); }
 
-	inline state_t& operator[]( std::size_t pos ) { return m_states[pos]; }
-	inline const state_t& operator[]( std::size_t pos ) const { return m_states[pos]; }
+	// No range check
+	inline state_view_t operator[]( std::size_t pos ) { assert(pos<N); return state_view_t(*this,pos); }
+	//inline const_state_view_t operator[]( std::size_t pos ) const { return m_states[pos]; }
+	inline const_state_view_t operator[]( std::size_t pos ) const { assert(pos<N); return const_state_view_t(*this,pos); }
 
-	inline void clear() { for( std::size_t i=0; i<N; ++i ) { m_states[i] = CLEAR; } }
+	// No range check
+	template< std::size_t BlockSize >
+	inline sub_block_t<BlockSize> block( std::size_t pos ) const { assert((pos+1)*BlockSize<=N); return m_states+pos*BlockSize; }
 
-	inline bool operator==( const my_type& rhs ) const
-	{
-		for( std::size_t i=0; i < N; ++i )
-		{
-			if( m_states[i] != rhs.m_states[i] ) { return false; }
-		}
-		return true;
-	}
+	// No range check
+	template< std::size_t BlockSize >
+	inline sub_block_view_t<BlockSize> blockview( std::size_t pos ) const { assert((pos+1)*BlockSize<=N); return sub_block_view_t<BlockSize>(*this,pos*BlockSize); }
+
+	inline void clear() { std::memset(m_states,uint8_t(CLEAR),sizeof(state_t)*N); }
+
+	inline int cmp( const my_type& rhs ) const { return std::memcmp(m_states, rhs.m_states, sizeof(state_t)*N); }
+
+	inline bool operator==( const my_type& rhs ) const { return 0 == std::memcmp(m_states, rhs.m_states, sizeof(state_t)*N); }
 
 	// this is rather arbitrary since state_t are categorical variables, but we define it nonetheless in order to support sorting.
-	inline bool operator<( const my_type& rhs ) const
+	inline bool operator<( const my_type& rhs ) const { return 0 > std::memcmp(m_states, rhs.m_states, sizeof(state_t)*N); }
+	inline bool operator>( const my_type& rhs ) const { return 0 < std::memcmp(m_states, rhs.m_states, sizeof(state_t)*N); }
+
+	//inline my_type& operator|=( const my_type& rhs ) { for( auto i(0); i<N; ++i ) { m_ints[i] = ((m_ints[i] | rhs.m_ints[i]) & 0x3) & (((m_ints[i] & CLEAR)^(rhs.m_ints[i] & CLEAR)) ^ CLEAR); } return *this; }
+	inline my_type& operator|=( const my_type& rhs )
 	{
-		for( std::size_t i=0; i < N; ++i )
+		for( auto i(0); i<N; ++i )
 		{
-			if( m_states[i] < rhs.m_states[i] ) { return true; }
+			switch(m_states[i])
+			{
+			case gap_state<state_t>::value:
+				switch(rhs.m_states[i])
+				{
+				case gap_state<state_t>::value: break;
+				default: m_states[i] = rhs.m_states[i]; break;
+				} break;
+			default: break;
+			}
 		}
-		return false;
+		return *this;
 	}
 };
+
+template< typename BlockT >
+using State_block_allocator_t = memory::AlignedAllocator<BlockT,alignof(BlockT)>;
+
+template< typename StateT, std::size_t Size >
+inline State_block<StateT,Size> operator|( const State_block<StateT,Size>& lhs, const State_block<StateT,Size>& rhs )
+{
+	State_block<StateT,Size> combined(lhs);
+	combined |= rhs;
+	return combined;
+}
 
 template< typename StateT, std::size_t Size >
 constexpr std::size_t size( const State_block< StateT, Size >& block ) { return Size; }
-/*
-template< typename StateT, uint Size >
-struct hash< State_block< StateT, Size > >
-{
-	using my_type = hash< State_block< StateT, Size > >;
 
-	static std::size_t operator()( const my_type& block )
-	{
-		std::string state_string(Size,char(StateT::state_t::GAP));
-		for( std::size_t i=0; i < Size; ++i )
-		{
-			state_string[i] = char(block[i]);
-		}
-		return hash<std::string>()(state_string);
-	}
-};
-*/
-template< typename StateT >
-struct State_block<StateT,8>
-{
-	using state_t = StateT;
-	enum { N=8 };
-	enum { N16=N/sizeof(uint16_t) };
-	enum { N32=N/sizeof(uint32_t) };
-	enum { N64=N/sizeof(uint64_t) };
-	//enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
-	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(gap_state<state_t>::value)) };
-
-	using my_type = State_block< StateT, N >;
-	using block16_t = uint16_t;
-	using block32_t = uint32_t;
-	using block64_t = uint64_t;
-
-	union {
-		state_t m_states[N];
-		block16_t m_block16[N16];
-		block32_t m_block32[N32];
-		block64_t m_block64[N64];
-		uint64_t m_block;
-	};
-
-	State_block( my_type&& other ) noexcept : m_block( std::move(other.m_block) ) { }
-	State_block( const my_type& other ) : m_block( other.m_block ) { }
-
-	my_type& operator=( my_type&& other ) noexcept { m_block = std::move(other.m_block); return *this; }
-	my_type& operator=( const my_type& other ) { m_block = other.m_block; return *this; }
-
-	inline state_t& operator[]( std::size_t pos ) { return m_states[pos]; }
-	inline const state_t& operator[]( std::size_t pos ) const { return m_states[pos]; }
-
-	inline uint16_t block16( std::size_t pos ) const { return m_block16[pos]; }
-	inline uint32_t block32( std::size_t pos ) const { return m_block32[pos]; }
-	inline uint64_t block64( std::size_t pos ) const { return m_block64[pos]; }
-
-	State_block() : m_block{CLEAR} { }
-	~State_block() { } // "= default" won't work here, since the union type apparently makes it non-trivial
-
-	inline void clear() { m_block=CLEAR; }
-
-	inline bool operator==( const my_type& rhs ) const
-	{
-		return m_block == rhs.m_block;
-	}
-
-	inline bool operator<( const my_type& rhs ) const
-	{
-		return m_block < rhs.m_block;
-	}
-};
-// /*
-// */
 template< typename StateT, std::size_t Size >
 inline bool operator!=( const State_block<StateT,Size>& lhs, const State_block<StateT,Size>& rhs ) { return !(lhs == rhs); }
 
@@ -204,535 +345,93 @@ std::ostream& operator<< ( std::ostream& os, const State_block<StateT,Size>& blo
 }
 
 template< typename StateT, std::size_t Size >
-std::size_t count_identical( State_block<StateT,Size> lhs, State_block<StateT,Size> rhs )
+std::size_t count_identical( const State_block<StateT,Size>& lhs, const State_block<StateT,Size>& rhs )
 {
 	std::size_t n=0;
-	for( std::size_t i=0; i<Size; ++i ) { lhs[i] == rhs[i] && ++n; }
+	for( std::size_t i=0; i<Size; ++i ) { n += (lhs[i] == rhs[i]); }
 	return n;
 }
 
-} // namespace apegrunt
-
-#include "misc/SIMD_intrinsics.h"
-
-namespace apegrunt {
-
 #ifndef NO_INTRINSICS
 
+#ifdef __POPCNT__
+
+// 16 states per block
 #ifdef __SSE2__
 template< typename StateT >
-struct alignas(16) State_block<StateT,16>
-{
-	using state_t = StateT;
-	using simd_t = __m128i;
-	enum { N=16 };
-	enum { N16=N/sizeof(uint16_t) };
-	enum { N32=N/sizeof(uint32_t) };
-	enum { N64=N/sizeof(uint64_t) };
-	//enum { Nblock=N/sizeof(uint64_t) };
-	//enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
-	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(gap_state<state_t>::value)) };
-	enum { TRUE=0xFFFF };
-
-	using my_type = State_block< state_t, N >;
-	using block16_t = uint16_t;
-	using block32_t = uint32_t;
-	using block64_t = uint64_t;
-
-	union {
-		state_t m_states[N];
-		block16_t m_block16[N16];
-		block32_t m_block32[N32];
-		block64_t m_block64[N64];
-	};
-
-	State_block() { this->clear(); }
-	~State_block() { } // "= default;" won't work here, since the union type makes the constructor non-trivial
-
-	State_block( my_type&& other ) noexcept { this->store( other() ); }
-	State_block( const my_type& other ) { this->store( other() ); }
-	my_type& operator=( my_type&& other ) noexcept { this->store( other() ); return *this; }
-	my_type& operator=( const my_type& other ) { this->store( other() ); return *this; }
-
-	inline simd_t operator()() { return this->load(); }
-	inline const simd_t operator()() const { return this->load(); }
-
-	inline void store( simd_t vec ) { _mm_store_si128( (simd_t*)m_states, vec ); }
-
-	inline simd_t load() { return _mm_load_si128( (simd_t*)m_states ); }
-	inline const simd_t load() const { return _mm_load_si128( (simd_t*)m_states ); }
-
-	inline state_t& operator[]( std::size_t pos ) { return m_states[pos]; }
-	inline const state_t& operator[]( std::size_t pos ) const { return m_states[pos]; }
-
-	inline uint16_t block16( std::size_t pos ) const { return m_block16[pos]; }
-	inline uint32_t block32( std::size_t pos ) const { return m_block32[pos]; }
-	inline uint64_t block64( std::size_t pos ) const { return m_block64[pos]; }
-
-	inline void clear() { this->store( _mm_set1_epi8( char(gap_state<state_t>::value) ) ); }
-
-	inline bool operator==( const my_type& rhs ) const
-	{
-		return TRUE == _mm_movemask_epi8( _mm_cmpeq_epi8( this->load(), rhs() ) );
-		//return m_block[0] == rhs.m_block[0] && m_block[1] == rhs.m_block[1];
-	}
-
-	inline bool operator<( const my_type& rhs ) const
-	{
-		return TRUE == _mm_movemask_epi8( _mm_cmplt_epi8( this->load(), rhs() ) );
-/*
-		for( std::size_t i=0; i < N; ++i )
-		{
-			if( m_states[i] < rhs.m_states[i] ) { return true; }
-		}
-		return false;
-*/
-	}
-};
-
-#ifdef __POPCNT__
-template< typename StateT >
 inline std::size_t count_identical( State_block<StateT,16> lhs, State_block<StateT,16> rhs )
 {
-	// Intel's had popcnt since Nehalem, so should be fairly safe to use nowadays
-	return _mm_popcnt_u32( _mm_movemask_epi8( _mm_cmpeq_epi8( lhs(), rhs() ) ) );
+	auto load = [](const StateT *const p){ return _mm_load_si128( (__m128i*)p ); };
+	return _mm_popcnt_u32( _mm_movemask_epi8( _mm_cmpeq_epi8( load(lhs.m_states), load(rhs.m_states) ) ) );
 }
-/*
-#else // for our purposes (comparing 1B pieces for equality) this bit-manipulation implementation is actually slower than the reference implementation
-template< typename StateT >
-inline std::size_t count_identical( State_block<StateT,16> lhs, State_block<StateT,16> rhs )
-{
-	uint32_t i = _mm_movemask_epi8( _mm_cmpeq_epi8( lhs(), rhs() ) );
-	i = i - ( (i >> 1) & 0x55555555 );
-	i = (i & 0x33333333) + ((i >> 2) & 0x33333333);
-	return (((i + (i >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
-}*/
-#endif // __POPCNT__
-
 #endif // __SSE2__
 
-#ifdef __AVX__
+// 32 states per block
+#ifdef __AVX2__
 template< typename StateT >
-struct alignas(32) State_block<StateT,32>
-//struct State_block<StateT,32>
+inline std::size_t count_identical( const State_block<StateT,32>& lhs, const State_block<StateT,32>& rhs )
 {
-	using state_t = StateT;
-	using simd_t = __m256i;
-	enum { N=32 };
-	enum { N16=N/sizeof(uint16_t) };
-	enum { N32=N/sizeof(uint32_t) };
-	enum { N64=N/sizeof(uint64_t) };
-	//enum { Nblock=N/sizeof(uint64_t) };
-	//enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
-	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(gap_state<state_t>::value)) };
-	enum { TRUE=0xFFFFFFFF };
-
-	using my_type = State_block< state_t, N >;
-
-	//union alignas(32) {
-	union {
-		state_t m_states[N];
-		uint16_t m_block16[N16];
-		uint32_t m_block32[N32];
-		uint64_t m_block64[N64];
-	};
-
-	State_block() { this->store( _mm256_set1_epi8( char(gap_state<state_t>::value) ) ); } // std::cout << this << " 32B-aligned: " << ( std::size_t(&m_vec) % 32 == 0 ? "true" : "FALSE") << std::endl;  }
-	~State_block() { } // "= default;" won't work here, since the union type makes it non-trivial
-
-	State_block( my_type&& other ) noexcept { this->store( other() ); }
-	State_block( const my_type& other ) { this->store( other() ); }
-	my_type& operator=( my_type&& other ) noexcept { this->store( other() ); return *this; }
-	my_type& operator=( const my_type& other ) { this->store( other() ); return *this; }
-
-	inline simd_t operator()() { return this->load(); }
-	inline const simd_t operator()() const { return this->load(); }
-
-	inline void store( simd_t vec )
-	{
-		_mm256_storeu_si256( (simd_t*)m_states, vec );
-		//std::cout << this << " 32B-aligned: " << ( std::size_t(m_states) % 32 == 0 ? "true" : "FALSE") << std::endl;
-	}
-
-	//inline simd_t load() { return _mm256_loadu_si256( (simd_t*)m_states ); }
-	//inline const simd_t load() const { return _mm256_loadu_si256( (simd_t*)m_states ); }
-	inline simd_t load() { return _mm256_lddqu_si256( (simd_t*)m_states ); } // may perform faster than _mm256_loadu_si256 when crossing cacheline boundary
-	inline const simd_t load() const { return _mm256_lddqu_si256( (simd_t*)m_states ); } // may perform faster than _mm256_loadu_si256 when crossing cacheline boundary
-
-	inline state_t& operator[]( std::size_t pos ) { return m_states[pos]; }
-	inline const state_t& operator[]( std::size_t pos ) const { return m_states[pos]; }
-
-	inline uint16_t block16( std::size_t pos ) const { return m_block16[pos]; }
-	inline uint32_t block32( std::size_t pos ) const { return m_block32[pos]; }
-	inline uint64_t block64( std::size_t pos ) const { return m_block64[pos]; }
-
-	inline void clear() { this->store( _mm256_set1_epi8( char(gap_state<state_t>::value) ) ); }
-	inline bool operator==( const my_type& rhs ) const
-	{
-#ifdef __AVX2__
-		return TRUE == _mm256_movemask_epi8( _mm256_cmpeq_epi8( this->load(), rhs() ) ); // both ops are AVX2
-#else
-		return m_block64[0] == rhs.m_block64[0] && m_block64[1] == rhs.m_block64[1] && m_block64[2] == rhs.m_block64[2] && m_block64[3] == rhs.m_block64[3];
-#endif // __AVX2__
-	}
-
-	inline bool operator<( const my_type& rhs ) const
-	{
-#ifdef __AVX2__
-		return TRUE == _mm256_movemask_epi8( _mm256_cmplt_epi8( this->load(), rhs() ) ); // both ops are AVX2
-#else
-		for( std::size_t i=0; i < N; ++i )
-		{
-			if( !(m_states[i] < rhs.m_states[i]) ) { return false; }
-		}
-		return true;
-#endif // __AVX2__
-	}
-};
-
-#endif // __AVX__
-
-#ifdef __AVX2__
-
-#ifdef __POPCNT__
+	//std::cout << "count_identical<avx2>" << std::endl;
+	auto load = [](const StateT *const p){ return _mm256_lddqu_si256( (__m256i*)p ); }; // may perform better than _mm256_loadu_si256, when loads cross cache-line boundary
+	//auto load = [](const StateT *const p){ return _mm256_loadu_si256( (__m256i*)p ); }; // hmm.. _mm256_loadu_si256 // our data is 32B-aligned; loads will never cross cache-line boundary
+	//auto load = [](const StateT *const p){ return _mm256_load_si256( (__m256i*)p ); }; // our data is 32B-aligned; loads will never cross cache-line boundary
+	return _mm_popcnt_u32( _mm256_movemask_epi8( _mm256_cmpeq_epi8( load(lhs.m_states), load(rhs.m_states) ) ) );
+}
+#else if __SSE2__
 template< typename StateT >
 inline std::size_t count_identical( State_block<StateT,32> lhs, State_block<StateT,32> rhs )
 {
-	// Intel's had popcnt since Nehalem, so should be fairly safe to use nowadays
-	return _mm_popcnt_u32( _mm256_movemask_epi8( _mm256_cmpeq_epi8( lhs(), rhs() ) ) );
+	//std::cout << "count_identical<sse2>" << std::endl;
+//	auto load = [](const StateT *const p){ return _mm_load_si128( (__m128i*)p ); };
+//	return	_mm_popcnt_u32( _mm_movemask_epi8( _mm_cmpeq_epi8( load(lhs.m_states), load(rhs.m_states) ) ) ) +
+//			_mm_popcnt_u32( _mm_movemask_epi8( _mm_cmpeq_epi8( load(lhs.m_states+16), load(rhs.m_states+16) ) ) );
+	auto load = [](const StateT *const p, std::size_t offset){ return _mm_load_si128( (__m128i*)(p+offset) ); };
+	return	_mm_popcnt_u32(
+				uint32_t(_mm_movemask_epi8( _mm_cmpeq_epi8( load(lhs.m_states,0), load(rhs.m_states,0) ) ) ) |
+				( uint32_t(_mm_movemask_epi8( _mm_cmpeq_epi8( load(lhs.m_states,16), load(rhs.m_states,16) ) ) ) << 16 )
+			);
 }
+#endif // __SSE2__
+
+// 64 states per block
+#ifdef __AVX2__
+template< typename StateT >
+inline std::size_t count_identical( const State_block<StateT,64>& lhs, const State_block<StateT,64>& rhs )
+{
+	auto load = [](const StateT *const p, int offset){ return _mm256_lddqu_si256( (__m256i*)(p+offset) ); }; // may perform better than _mm256_loadu_si256, when loads cross cache-line boundary
+	//auto load = [](const StateT *const p, int offset){ return _mm256_loadu_si256( (__m256i*)(p+offset) ); }; // hmm.. _mm256_loadu_si256 will produce the wrong result on zen2 // our data is 64B-aligned; loads will never cross cache-line boundary
+	//auto load = [](const StateT *const p, int offset){ return _mm256_load_si256( (__m256i*)(p+offset) ); }; // our data is 64B-aligned; loads will never cross cache-line boundary
+	return	_mm_popcnt_u32( _mm256_movemask_epi8( _mm256_cmpeq_epi8( load(lhs.m_states,0), load(rhs.m_states,0) ) ) ) +
+			_mm_popcnt_u32( _mm256_movemask_epi8( _mm256_cmpeq_epi8( load(lhs.m_states,32), load(rhs.m_states,32) ) ) );
+// this one is broken (doesn't crash, but gives the wrong result):
+//	return	_mm_popcnt_u64(
+//				uint64_t(_mm256_movemask_epi8( _mm256_cmpeq_epi8( load(lhs.m_states,0), load(rhs.m_states,0) ) ) ) |
+//				( uint64_t(_mm256_movemask_epi8( _mm256_cmpeq_epi8( load(lhs.m_states,32), load(rhs.m_states,32) ) ) ) << 32 )
+//			);
+}
+#else if __SSE2__
+template< typename StateT >
+inline std::size_t count_identical( State_block<StateT,64> lhs, State_block<StateT,64> rhs )
+{
+	auto load = [](const StateT *const p, int offset){ return _mm_load_si128( (__m128i*)(p+offset) ); }; // hmm.. _mm_loadu_si128 will produce the wrong result on zen2
+// this version is correct, but perhaps a tiny bit slower than the alternative below
+//	return	_mm_popcnt_u32( _mm_movemask_epi8( _mm_cmpeq_epi8( load(lhs.m_states,0), load(rhs.m_states,0) ) ) ) +
+//			_mm_popcnt_u32( _mm_movemask_epi8( _mm_cmpeq_epi8( load(lhs.m_states,16), load(rhs.m_states,16) ) ) ) +
+//			_mm_popcnt_u32( _mm_movemask_epi8( _mm_cmpeq_epi8( load(lhs.m_states,32), load(rhs.m_states,32) ) ) ) +
+//			_mm_popcnt_u32( _mm_movemask_epi8( _mm_cmpeq_epi8( load(lhs.m_states,48), load(rhs.m_states,48) ) ) )
+//			;
+	return	_mm_popcnt_u64(
+				(uint64_t)_mm_movemask_epi8( _mm_cmpeq_epi8( load(lhs.m_states,0), load(rhs.m_states,0) ) ) |
+				( (uint64_t)_mm_movemask_epi8( _mm_cmpeq_epi8( load(lhs.m_states,16), load(rhs.m_states,16) ) ) << 16 ) |
+				( (uint64_t)_mm_movemask_epi8( _mm_cmpeq_epi8( load(lhs.m_states,32), load(rhs.m_states,32) ) ) << 32 ) |
+				( (uint64_t)_mm_movemask_epi8( _mm_cmpeq_epi8( load(lhs.m_states,48), load(rhs.m_states,48) ) ) << 48 )
+			);
+}
+#endif // __SSE2__
+
 #endif // __POPCNT__
 
-#endif // __AVX2__
-
-/*
-template< typename StateT >
-struct alignas(32) State_block<StateT,64>
-{
-	using state_t = StateT;
-	using simd_t = __m256i;
-	enum { N=64 };
-	enum { Nblock=N/sizeof(uint64_t) };
-	//enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
-	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(gap_state<state_t>::value)) };
-
-	using my_type = State_block< state_t, N >;
-
-	union {
-		state_t m_states[N];
-		uint64_t m_block[Nblock];
-	};
-
-	State_block() { this->store( _mm256_set1_epi8( char(gap_state<state_t>::value) ) ); } // std::cout << this << " 32B-aligned: " << ( std::size_t(&m_vec) % 32 == 0 ? "true" : "FALSE") << std::endl;  }
-	~State_block() { } // "= default;" won't work here, since the union type makes it non-trivial
-
-	State_block( my_type&& other ) noexcept { this->store( other() ); }
-	State_block( const my_type& other ) { this->store( other() ); }
-	my_type& operator=( my_type&& other ) noexcept { this->store( other() ); return *this; }
-	my_type& operator=( const my_type& other ) { this->store( other() ); return *this; }
-
-	inline simd_t operator()() { return this->load(); }
-	inline const simd_t operator()() const { return this->load(); }
-
-	inline void store( simd_t vec )
-	{
-		_mm256_storeu_si256( (simd_t*)m_states, vec );
-		//std::cout << this << " 32B-aligned: " << ( std::size_t(m_states) % 32 == 0 ? "true" : "FALSE") << std::endl;
-	}
-
-	//inline simd_t load() { return _mm256_loadu_si256( (simd_t*)m_states ); }
-	//inline const simd_t load() const { return _mm256_loadu_si256( (simd_t*)m_states ); }
-	inline simd_t load() { return _mm256_lddqu_si256( (simd_t*)m_states ); } // may perform faster than _mm256_loadu_si256 when crossing cacheline boundary
-	inline const simd_t load() const { return _mm256_lddqu_si256( (simd_t*)m_states ); } // may perform faster than _mm256_loadu_si256 when crossing cacheline boundary
-
-	inline state_t& operator[]( std::size_t pos ) { return m_states[pos]; }
-	inline const state_t& operator[]( std::size_t pos ) const { return m_states[pos]; }
-
-	inline void clear() { this->store( _mm256_set1_epi8( char(gap_state<state_t>::value) ) ); }
-
-	inline bool operator==( const my_type& rhs ) const
-	{
-		// _mm256_cmpeq_epi8( (*this)(), rhs() );
-		return	m_block[0] == rhs.m_block[0] && m_block[1] == rhs.m_block[1] && m_block[2] == rhs.m_block[2] && m_block[3] == rhs.m_block[3];
-		//return _mm256_testc_si256( (*this)(), rhs() );
-	}
-
-	inline bool operator<( const my_type& rhs ) const
-	{
-		for( std::size_t i=0; i < N; ++i )
-		{
-			if( m_states[i] < rhs.m_states[i] ) { return true; }
-		}
-		return false;
-	}
-};
-*/
-
-#else // #ifndef NO_INTRINSICS
-
-template< typename StateT >
-struct State_block<StateT,16>
-{
-	using state_t = StateT;
-	enum { N=16 };
-	enum { N16=N/sizeof(uint16_t) };
-	enum { N32=N/sizeof(uint32_t) };
-	enum { N64=N/sizeof(uint64_t) };
-	enum { Nblock=N/sizeof(uint64_t) };
-	//enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
-	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(gap_state<state_t>::value)) };
-
-	using my_type = State_block< StateT, N >;
-
-	union {
-		state_t m_states[N];
-		uint64_t m_block[Nblock];
-	};
-
-	State_block() : m_block{CLEAR} { } // { this->clear(); }
-	~State_block() { } // "= default;" won't work here, since the union type makes it non-trivial
-
-	State_block( my_type&& other ) noexcept
-	{
-		for( std::size_t i=0; i < Nblock; ++i ) { m_block[i] = std::move(other.m_block[i]); } // let the compiler do the unrolling
-	}
-
-	State_block( const my_type& other )
-	{
-		for( std::size_t i=0; i < Nblock; ++i ) { m_block[i] = other.m_block[i]; } // let the compiler do the unrolling
-	}
-
-	my_type& operator=( my_type&& other ) noexcept
-	{
-		for( std::size_t i=0; i < Nblock; ++i ) { m_block[i] = std::move(other.m_block[i]); } // let the compiler do the unrolling
-		return *this;
-	}
-
-	my_type& operator=( const my_type& other )
-	{
-		for( std::size_t i=0; i < Nblock; ++i ) { m_block[i] = other.m_block[i]; } // let the compiler do the unrolling
-		return *this;
-	}
-
-	inline state_t& operator[]( std::size_t pos ) { return m_states[pos]; }
-	inline const state_t& operator[]( std::size_t pos ) const { return m_states[pos]; }
-
-	inline void clear() { for( std::size_t i=0; i < Nblock; ++i ) { m_block[i] = CLEAR; } }
-
-	inline bool operator==( const my_type& rhs ) const
-	{
-		//std::cout << "lhs=" << *this << ( m_block[0] == rhs.m_block[0] && m_block[1] == rhs.m_block[1] ? " == " : " != " ) << "rhs=" << rhs << std::endl;
-		return m_block[0] == rhs.m_block[0] && m_block[1] == rhs.m_block[1];
-	}
-
-	inline bool operator<( const my_type& rhs ) const
-	{
-		//return m_block[0] < rhs.m_block[0] && m_block[1] < rhs.m_block[1];
-		for( std::size_t i=0; i < N; ++i )
-		{
-			if( m_states[i] < rhs.m_states[i] ) { return true; }
-		}
-		return false;
-	}
-};
-
-template< typename StateT >
-struct State_block<StateT,32>
-{
-	using state_t = StateT;
-	enum { N=32 };
-	enum { Nblock=N/sizeof(uint64_t) };
-	//enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(state_t::state_t::GAP)) };
-	enum { CLEAR=create_clear<uint64_t,sizeof(uint64_t)>(uint8_t(gap_state<state_t>::value)) };
-	using my_type = State_block< state_t, N >;
-	using row_t = std::array< state_t, N >;
-
-	union {
-		row_t m_states;
-		uint64_t m_block[Nblock];
-	};
-
-	State_block() : m_block{CLEAR} { } //{ m_block[0] = CLEAR; m_block[1] = CLEAR; m_block[2] = CLEAR; m_block[3] = CLEAR; }
-	~State_block() { } // "= default;" won't work here, since the union type makes it non-trivial
-
-	State_block( my_type&& other ) noexcept
-	{
-		for( std::size_t i=0; i < Nblock; ++i ) { m_block[i] = std::move(other.m_block[i]); } // let the compiler do the unrolling
-		//m_block[0] = std::move(other.m_block[0]); m_block[1] = std::move(other.m_block[1]); m_block[2] = std::move(other.m_block[2]); m_block[3] = std::move(other.m_block[3]);
-	}
-
-	State_block( const my_type& other )
-	{
-		for( std::size_t i=0; i < Nblock; ++i ) { m_block[i] = other.m_block[i]; } // let the compiler do the unrolling
-		//m_block[0] = other.m_block[0]; m_block[1] = other.m_block[1]; m_block[2] = other.m_block[2]; m_block[3] = other.m_block[3];
-	}
-
-	my_type& operator=( my_type&& other ) noexcept
-	{
-		for( std::size_t i=0; i < Nblock; ++i ) { m_block[i] = std::move(other.m_block[i]); } // let the compiler do the unrolling
-		//m_block[0] = std::move(other.m_block[0]); m_block[1] = std::move(other.m_block[1]);	m_block[2] = std::move(other.m_block[2]); m_block[3] = std::move(other.m_block[3]);
-		return *this;
-	}
-
-	my_type& operator=( const my_type& other )
-	{
-		for( std::size_t i=0; i < Nblock; ++i ) { m_block[i] = other.m_block[i]; } // let the compiler do the unrolling
-		//m_block[0] = other.m_block[0]; m_block[1] = other.m_block[1]; m_block[2] = other.m_block[2]; m_block[3] = other.m_block[3];
-		return *this;
-	}
-
-	inline state_t& operator[]( std::size_t pos ) { return m_states[pos]; }
-	inline const state_t& operator[]( std::size_t pos ) const { return m_states[pos]; }
-
-	inline void clear() { for( std::size_t i=0; i < Nblock; ++i ) { m_block[i] =CLEAR; } }
-
-	inline bool operator==( const my_type& rhs ) const
-	{
-		//std::cout << "compare" << std::endl;
-		//std::cout << "lhs=" << *this << ( m_block[0] == rhs.m_block[0] && m_block[1] == rhs.m_block[1] ? " == " : " != " ) << "rhs=" << rhs << std::endl;
-		return	m_block[0] == rhs.m_block[0] && m_block[1] == rhs.m_block[1] &&	m_block[2] == rhs.m_block[2] &&	m_block[3] == rhs.m_block[3];
-	}
-
-	inline bool operator<( const my_type& rhs ) const
-	{
-		//return m_block[0] < rhs.m_block[0] && m_block[1] < rhs.m_block[1] && m_block[2] < rhs.m_block[2] && m_block[3] < rhs.m_block[3];
-		for( std::size_t i=0; i < N; ++i )
-		{
-			if( m_states[i] < rhs.m_states[i] ) { return true; }
-		}
-		return false;
-	}
-};
-
 #endif // #ifndef NO_INTRINSICS
-// /*
-
-template< typename StateT, std::size_t Size >
-//struct alignas(sizeof(void*)) Compressed_state_block
-struct alignas(Size*2) Compressed_state_block
-{
-	using state_t = StateT;
-	enum { N=Size*2 };
-	enum { CLEAR=uint16_t(0) };
-
-	struct state_and_count
-	{
-		state_and_count() : block(CLEAR) { }
-		~state_and_count() { }
-
-		state_and_count( const state_and_count& other ) : block(other.block) { }
-		state_and_count( state_and_count&& other ) noexcept : block(std::move(other.block)) { }
-
-		state_and_count& operator=( const state_and_count& other ) { block = other.block; return *this; }
-		state_and_count& operator=( state_and_count&& other ) noexcept { block = std::move(other.block); return *this; }
-
-		union {
-			struct {
-				state_t state;
-				uint8_t n;
-			};
-			uint16_t block;
-		};
-	};
-
-	using row_t = std::array<state_and_count,N>;
-	using my_type = Compressed_state_block<state_t,N>;
-
-	row_t m_states;
-	std::size_t m_pos;
-
-	Compressed_state_block() { this->clear(); }
-	~Compressed_state_block() { } // "= default;" won't work here, since the union type makes it non-trivial
-
-	Compressed_state_block( my_type&& other ) noexcept : m_pos(other.m_pos)
-	{
-		for( std::size_t i=0; i < N; ++i ) { m_states[i] = std::move(other.m_states[i]); } // let the compiler do the unrolling
-	}
-
-	Compressed_state_block( const my_type& other ) : m_pos(other.m_pos)
-	{
-		for( std::size_t i=0; i < N; ++i ) { m_states[i] = other.m_states[i]; } // let the compiler do the unrolling
-	}
-
-	Compressed_state_block( const State_block<state_t,Size>& stateblock ) : m_pos(0)
-	{
-		m_states[m_pos].state = stateblock[0];
-		for( std::size_t i=0; i < Size; ++i )
-		{
-			if( m_states[m_pos].state != stateblock[i] )
-			{
-				++m_pos;
-				m_states[m_pos].state = stateblock[i];
-			}
-			++(m_states[m_pos].n);
-		}
-		++m_pos;
-		//std::cout << "Compressed_state_block capacity=" << Size << " used=" << m_pos << (m_pos > Size/2 ? " *" : "") << std::endl;
-	}
-
-	my_type& operator=( my_type&& other ) noexcept
-	{
-		for( std::size_t i=0; i < N; ++i ) { m_states[i] = std::move(other.m_states[i]); } // let the compiler do the unrolling
-		m_pos = other.m_pos;
-		return *this;
-	}
-
-	my_type& operator=( const my_type& other )
-	{
-		for( std::size_t i=0; i < N; ++i ) { m_states[i] = other.m_states[i]; } // let the compiler do the unrolling
-		m_pos = other.m_pos;
-		return *this;
-	}
-
-	inline state_t& operator[]( std::size_t pos ) { std::size_t i=0; std::size_t intpos=0; while( intpos < pos && i < m_pos ) { intpos += m_states[i].n; ++i; } return m_states[i].state; }
-	inline const state_t& operator[]( std::size_t pos ) const { std::size_t i=0; std::size_t intpos=0; while( intpos < pos && i < m_pos ) { intpos += m_states[i].n; ++i; } return m_states[i].state; }
-
-	inline void clear() { for( std::size_t i=0; i<N; ++i ) { m_states[i] = CLEAR; } m_pos=0; }
-
-	inline bool operator==( const my_type& rhs ) const
-	{
-		for( std::size_t i=0; i < N; ++i )
-		{
-			if( m_states[i] != rhs.m_states[i] ) { return false; }
-		}
-		return true;
-	}
-
-	inline bool operator<( const my_type& rhs ) const
-	{
-		for( std::size_t i=0; i < N; ++i )
-		{
-			if( m_states[i] < rhs.m_states[i] ) { return true; }
-		}
-		return false;
-	}
-};
-
-template< typename StateT, std::size_t Size >
-inline bool operator!=( const Compressed_state_block<StateT,Size>& lhs, const Compressed_state_block<StateT,Size>& rhs ) { return !(lhs == rhs); }
-
-template< typename StateT, std::size_t Size >
-inline bool operator> ( const Compressed_state_block<StateT,Size>& lhs, const Compressed_state_block<StateT,Size>& rhs ) { return (rhs < lhs); }
-
-template< typename StateT, std::size_t Size >
-inline bool operator<=( const Compressed_state_block<StateT,Size>& lhs, const Compressed_state_block<StateT,Size>& rhs ) { return !(lhs > rhs); }
-
-template< typename StateT, std::size_t Size >
-inline bool operator>=( const Compressed_state_block<StateT,Size>& lhs, const Compressed_state_block<StateT,Size>& rhs ) { return !(lhs < rhs); }
-
-template< typename StateT, std::size_t Size >
-std::ostream& operator<< ( std::ostream& os, const Compressed_state_block<StateT,Size>& block )
-{
-	os << "[";
-	for( std::size_t i=0; i < block.m_pos; ++i )
-	{
-		os << " " << char(block.m_states[i].state) << ":" << std::size_t(block.m_states[i].n);
-	}
-	os << " ]";
-	return os;
-}
-
-// */
 
 } // namespace apegrunt
 

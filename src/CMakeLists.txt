@@ -18,6 +18,7 @@ link_directories( ${Boost_LIBRARY_DIRS} )
 set( APEGRUNT_LIBRARY_SOURCES
 	Apegrunt_options.cpp
 	aligned_allocator.cpp
+	StateVector_state_types.cpp
 ) # *.cpp *.hpp *.cc
 
 set( APEGRUNT_BINARY_SOURCES
