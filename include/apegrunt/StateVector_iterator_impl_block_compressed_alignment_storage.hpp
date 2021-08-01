@@ -44,6 +44,7 @@ public:
 	using index_container_t = typename ContainerT::block_index_container_t;
 	using block_type = typename ContainerT::block_type;
 
+	//using value_type = State_holder<state_t>;
 	using value_type = state_t;
 	using reference = value_type; // almost always T& or const T&
     using pointer = const value_type*; //almost always T* or const T*
@@ -77,6 +78,7 @@ public:
 		m_pos = rhs.m_pos;
 		m_container = rhs.m_container;
 		m_block_col = rhs.m_block_col;
+		return *this;
 	}
 
     //StateVector_iterator_impl_block_compressed_alignment_storage( uint8_t pos, typename index_container_t::const_iterator&& index_itr, const ContainerT *container )
@@ -89,15 +91,16 @@ public:
     	//std::cout << " block=\"" << m_cache << "\"" << std::endl;
     }
 
-	inline const_iterator& operator++() { ++m_pos; if( m_pos == block_type::N ) { ++m_block_col; this->load_into_cache(m_block_col); } return *this; }
+	inline const_iterator& operator++() { if( ++m_pos == block_type::N ) { ++m_block_col; this->load_into_cache(m_block_col); } return *this; }
     //inline const_iterator operator++(int) { my_type temp(m_position); ++m_position; return temp; }
 	//inline const_iterator& operator+=( std::size_t n ) { m_position+=n; return *this; }
     inline reference operator*() const
     {
+    	//std::cout << "StateVector_iterator_impl_block_compressed_alignment_storage: deref pos=" << std::size_t(m_pos); std::cout.flush(); std::cout << " value=" << m_cache[m_pos] << std::endl;
     	//std::cout << "m_block_index_itr=" << *m_block_index_itr << " &=" << &*m_block_index_itr << " m_pos=" << std::size_t(m_pos) << std::endl;
     	return m_cache[m_pos];
     }
-    inline pointer operator->() const { return &(m_cache[m_pos]); }
+    //inline pointer operator->() const { return &(m_cache[m_pos]); }
     inline bool operator==( const my_type& rhs ) const
     {
     	//std::cout << "op==(): " << m_block_col << " v " << rhs.m_block_col << " (itr==" << ( m_block_col == rhs.m_block_col ? "TRUE" : "FALSE" ) << "), " << std::size_t(m_pos) << " v " << std::size_t(rhs.m_pos) << std::endl;
@@ -111,7 +114,7 @@ public:
     }
 
     inline const std::type_info& type() const { return typeid(my_type); }
-    inline std::shared_ptr<my_type> clone() const { return std::make_shared<my_type>( m_pos, m_block_col, m_container ); }
+    inline std::unique_ptr<my_type> clone() const { return std::make_unique<my_type>( m_pos, m_block_col, m_container ); }
 
 private:
     block_type m_cache;

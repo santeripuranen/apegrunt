@@ -204,11 +204,13 @@ public:
 		//if( size_hint > 0 ) { m_block_indices->reserve(size_hint); }
 	}
 
-	inline const_iterator cbegin() const { return const_iterator( std::make_shared<const_iterator_impl>( 0, 0, this ) ); }
-    inline const_iterator cend() const { return const_iterator( std::make_shared<const_iterator_impl>( m_pos, (m_pos==0 ? m_block_indices.size() : m_block_indices.size()-1 ), this ) ); }
+	inline const_iterator cbegin() const { return const_iterator( std::make_unique<const_iterator_impl>( 0, 0, this ) ); }
+    //inline const_iterator cend() const { return const_iterator( std::make_unique<const_iterator_impl>( m_pos, (m_pos==0 ? m_block_indices->size() : m_block_indices->size()-1 ), this ) ); }
+    inline const_iterator cend() const { return std::make_unique<const_iterator_impl>( apegrunt::get_pos_in_block(m_size), apegrunt::get_last_block_index(m_size)+(apegrunt::get_pos_in_block(m_size)==0), this ); }
 
-    inline iterator begin() { return iterator( std::make_shared<iterator_impl>( 0, 0, this ) ); }
-    inline iterator end() { return iterator( std::make_shared<iterator_impl>( m_pos, (m_pos==0 ? m_block_indices.size() : m_block_indices.size()-1 ), this ) ); }
+    inline iterator begin() { return iterator( std::make_unique<iterator_impl>( 0, 0, this ) ); }
+    //inline iterator end() { return iterator( std::make_unique<iterator_impl>( m_pos, (m_pos==0 ? m_block_indices->size() : m_block_indices->size()-1 ), this ) ); }
+    inline iterator end() { return std::make_unique<iterator_impl>( apegrunt::get_pos_in_block(m_size), apegrunt::get_last_block_index(m_size)+(apegrunt::get_pos_in_block(m_size)==0), this ); }
 
     inline value_type operator[]( std::size_t index ) const
     {
@@ -356,8 +358,11 @@ public:
 	}
 
 private:
-	using iterator_impl = apegrunt::iterator::StateVector_iterator_impl_block_compressed_alignment_storage< State_holder<state_t>, StateVector_impl_block_compressed_alignment_storage<state_t> >;
-	using const_iterator_impl = apegrunt::iterator::StateVector_iterator_impl_block_compressed_alignment_storage< State_holder<state_t>, StateVector_impl_block_compressed_alignment_storage<state_t> >;
+	//using iterator_impl = apegrunt::iterator::StateVector_iterator_impl_block_compressed_alignment_storage< State_holder<state_t>, StateVector_impl_block_compressed_alignment_storage<state_t> >;
+	//using const_iterator_impl = apegrunt::iterator::StateVector_iterator_impl_block_compressed_alignment_storage< State_holder<state_t>, StateVector_impl_block_compressed_alignment_storage<state_t> >;
+
+	using iterator_impl = apegrunt::iterator::StateVector_iterator_impl_block_compressed_alignment_storage< state_t, StateVector_impl_block_compressed_alignment_storage<state_t> >;
+	using const_iterator_impl = apegrunt::iterator::StateVector_iterator_impl_block_compressed_alignment_storage< state_t, StateVector_impl_block_compressed_alignment_storage<state_t> >;
 
 	friend iterator_impl;
 	friend const_iterator_impl;

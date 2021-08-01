@@ -66,7 +66,7 @@ public:
     inline bool operator<( const my_type& rhs ) const { return this->lt_operator_impl( rhs ); }
 
     inline const std::type_info& type() const { return this->type_impl(); }
-    inline std::shared_ptr<my_type> clone() const { return this->clone_impl(); }
+    inline std::unique_ptr<my_type> clone() const { return this->clone_impl(); }
 
 private:
     virtual my_type& pre_increment_operator_impl() = 0;
@@ -78,7 +78,7 @@ private:
     virtual bool lt_operator_impl( const my_type& rhs ) const = 0;
 
     virtual const std::type_info& type_impl() const = 0;
-    virtual std::shared_ptr<my_type> clone_impl() const = 0;
+    virtual std::unique_ptr<my_type> clone_impl() const = 0;
 };
 
 template< typename StateT >
@@ -95,7 +95,8 @@ class StateVector_iterator //: std::iterator<std::forward_iterator_tag,StateVect
 {
 public:
 	using state_t = StateT;
-	using value_type = State_holder<state_t>;
+	//using value_type = State_holder<state_t>;
+	using value_type = state_t;
 	using reference = value_type; // almost always T& or const T&
     using pointer = const value_type*; //almost always T* or const T*
 	//using iterator_category = std::random_access_iterator_tag;
@@ -117,7 +118,7 @@ public:
 */
 // /*
 	template< typename ImplT >
-	StateVector_iterator( std::shared_ptr<ImplT>&& impl ) : m_impl( std::move(impl) ) { }
+	StateVector_iterator( std::unique_ptr<ImplT>&& impl ) : m_impl( std::move(impl) ) { }
 // */
 /*
 	template< typename ImplT >
@@ -135,7 +136,7 @@ public:
 
 private:
     //apegrunt::iterator::StateVector_iterator_impl<value_type>* m_impl;
-    std::shared_ptr< apegrunt::iterator::StateVector_iterator_impl<value_type> > m_impl;
+    std::unique_ptr< apegrunt::iterator::StateVector_iterator_impl<value_type> > m_impl;
     //std::unique_ptr< apegrunt::iterator::StateVector_iterator_impl<value_type> > m_impl;
 };
 
